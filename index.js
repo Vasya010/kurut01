@@ -493,7 +493,7 @@ app.put("/api/users/:id", authenticate, upload.single("photo"), async (req, res)
   }
 
   const { id } = req.params;
-  const { email, name, phone, role } = req.body;
+  const { email, name, phone, role, password } = req.body;
   const photo = req.file;
 
   if (!email || !name || !phone || !role) {
@@ -540,10 +540,19 @@ app.put("/api/users/:id", authenticate, upload.single("photo"), async (req, res)
       }
     }
 
-    await connection.execute(
-      "UPDATE users1 SET first_name = ?, last_name = ?, email = ?, phone = ?, role = ?, profile_picture = ? WHERE id = ?",
-      [first_name, last_name, email, phone, role, profile_picture, id]
-    );
+    // Update password if provided
+    if (password && password.trim()) {
+      const hashedPassword = await bcrypt.hash(password, 10);
+      await connection.execute(
+        "UPDATE users1 SET first_name = ?, last_name = ?, email = ?, phone = ?, role = ?, profile_picture = ?, password = ? WHERE id = ?",
+        [first_name, last_name, email, phone, role, profile_picture, hashedPassword, id]
+      );
+    } else {
+      await connection.execute(
+        "UPDATE users1 SET first_name = ?, last_name = ?, email = ?, phone = ?, role = ?, profile_picture = ? WHERE id = ?",
+        [first_name, last_name, email, phone, role, profile_picture, id]
+      );
+    }
 
     const updatedUser = {
       id: parseInt(id),
