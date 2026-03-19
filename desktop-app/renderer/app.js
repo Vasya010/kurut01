@@ -60,6 +60,8 @@ const toggleCreateVariantBtn = $("toggleCreateVariantBtn");
 const createVariantPanel = $("createVariantPanel");
 const createVariantForm = $("createVariantForm");
 const cancelCreateVariantBtn = $("cancelCreateVariantBtn");
+const cancelCreateVariantBtn2 = $("cancelCreateVariantBtn2");
+const createVariantBackdrop = $("createVariantBackdrop");
 const createVariantError = $("createVariantError");
 
 const variantTypeSelect = $("variantType");
@@ -708,6 +710,14 @@ navTypesBtn.addEventListener("click", async () => {
 function setCreatePanelOpen(open) {
   if (!createVariantPanel) return;
   createVariantPanel.classList.toggle("hidden", !open);
+  if (open) {
+    document.body.style.overflow = "hidden";
+    setTimeout(() => {
+      if (variantTypeSelect) variantTypeSelect.focus();
+    }, 0);
+  } else {
+    document.body.style.overflow = "";
+  }
 }
 
 function setVariantsUiLoading(button, loading) {
@@ -761,6 +771,32 @@ if (cancelCreateVariantBtn) {
     setHidden(createVariantError, true);
   });
 }
+
+if (cancelCreateVariantBtn2) {
+  cancelCreateVariantBtn2.addEventListener("click", () => {
+    setCreatePanelOpen(false);
+    if (createVariantForm) createVariantForm.reset();
+    setHidden(createVariantError, true);
+  });
+}
+
+if (createVariantBackdrop) {
+  createVariantBackdrop.addEventListener("click", () => {
+    setCreatePanelOpen(false);
+    if (createVariantForm) createVariantForm.reset();
+    setHidden(createVariantError, true);
+  });
+}
+
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape") return;
+  if (!createVariantPanel) return;
+  const isOpen = !createVariantPanel.classList.contains("hidden");
+  if (!isOpen) return;
+  setCreatePanelOpen(false);
+  if (createVariantForm) createVariantForm.reset();
+  setHidden(createVariantError, true);
+});
 
 const createVariantBtn = $("createVariantBtn");
 

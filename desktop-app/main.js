@@ -202,6 +202,82 @@ ipcMain.handle("get-property-types", async () => {
   return Array.isArray(types) ? types : [];
 });
 
+ipcMain.handle("get-districts", async () => {
+  const token = await getToken();
+  if (!token) throw new Error("Не авторизован");
+  try {
+    const rows = await apiFetch("/api/districts", { method: "GET", token });
+    return Array.isArray(rows) ? rows : [];
+  } catch (err) {
+    if (err && err.status === 401) {
+      const s = store;
+      if (s) {
+        s.delete("token");
+        s.delete("user");
+      }
+    }
+    throw err;
+  }
+});
+
+ipcMain.handle("get-subdistricts", async (_event, { districtId } = {}) => {
+  const token = await getToken();
+  if (!token) throw new Error("Не авторизован");
+  if (districtId === undefined || districtId === null || String(districtId).trim() === "") {
+    return [];
+  }
+  const qs = `district_id=${encodeURIComponent(String(districtId).trim())}`;
+  try {
+    const rows = await apiFetch(`/api/subdistricts?${qs}`, { method: "GET", token });
+    return Array.isArray(rows) ? rows : [];
+  } catch (err) {
+    if (err && err.status === 401) {
+      const s = store;
+      if (s) {
+        s.delete("token");
+        s.delete("user");
+      }
+    }
+    throw err;
+  }
+});
+
+ipcMain.handle("get-jk-list", async () => {
+  const token = await getToken();
+  if (!token) throw new Error("Не авторизован");
+  try {
+    const rows = await apiFetch("/api/jk", { method: "GET", token });
+    return Array.isArray(rows) ? rows : [];
+  } catch (err) {
+    if (err && err.status === 401) {
+      const s = store;
+      if (s) {
+        s.delete("token");
+        s.delete("user");
+      }
+    }
+    throw err;
+  }
+});
+
+ipcMain.handle("get-curators", async () => {
+  const token = await getToken();
+  if (!token) throw new Error("Не авторизован");
+  try {
+    const rows = await apiFetch("/api/curators", { method: "GET", token });
+    return Array.isArray(rows) ? rows : [];
+  } catch (err) {
+    if (err && err.status === 401) {
+      const s = store;
+      if (s) {
+        s.delete("token");
+        s.delete("user");
+      }
+    }
+    throw err;
+  }
+});
+
 ipcMain.handle("get-variants", async (_event, { mode = "all", id = null } = {}) => {
   const token = await getToken();
   if (!token) throw new Error("Не авторизован");

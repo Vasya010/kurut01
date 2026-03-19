@@ -286,61 +286,6 @@
                 </div>
               </div>
 
-              <div id="createVariantPanel" class="create hidden">
-                <div class="panel-header tight">
-                  <div class="panel-title">Создать вариант</div>
-                  <div class="panel-subtitle">Заполните обязательные поля</div>
-                </div>
-
-                <form id="createVariantForm" class="create-form" autocomplete="off">
-                  <div class="form-grid">
-                    <div class="field">
-                      <label for="variantType">Тип</label>
-                      <select id="variantType" required>
-                        <option value="">Выберите тип</option>
-                      </select>
-                    </div>
-
-                    <div class="field">
-                      <label for="variantPrice">Цена</label>
-                      <input id="variantPrice" type="number" min="0" step="0.01" placeholder="Например: 120000" required />
-                    </div>
-
-                    <div class="field">
-                      <label for="variantRukPrice">Рук. цена</label>
-                      <input id="variantRukPrice" type="number" min="0" step="0.01" placeholder="Например: 110000" required />
-                    </div>
-
-                    <div class="field">
-                      <label for="variantMkv">Площадь (m2)</label>
-                      <input id="variantMkv" type="number" min="0" step="0.01" placeholder="Например: 55.5" required />
-                    </div>
-
-                    <div class="field">
-                      <label for="variantAddress">Адрес</label>
-                      <input id="variantAddress" type="text" placeholder="Улица, дом..." required />
-                    </div>
-
-                    <div class="field">
-                      <label for="variantEtaj">Этаж</label>
-                      <input id="variantEtaj" type="number" min="0" step="1" placeholder="Например: 5" required />
-                    </div>
-
-                    <div class="field">
-                      <label for="variantEtajnost">Этажность</label>
-                      <input id="variantEtajnost" type="number" min="0" step="1" placeholder="Например: 9" required />
-                    </div>
-                  </div>
-
-                  <div id="createVariantError" class="alert hidden" role="alert"></div>
-
-                  <div class="create-actions">
-                    <button id="createVariantBtn" class="primary-btn" type="submit">Создать</button>
-                    <button id="cancelCreateVariantBtn" class="ghost-btn" type="button">Отмена</button>
-                  </div>
-                </form>
-              </div>
-
               <div class="table-wrap">
                 <table class="table">
                   <thead>
@@ -364,6 +309,148 @@
           </div>
         </section>
       </main>
+    </div>
+
+    <div id="createVariantPanel" class="modal hidden" role="dialog" aria-modal="true" aria-label="Создать вариант">
+      <div id="createVariantBackdrop" class="modal-backdrop"></div>
+      <div class="modal-sheet">
+        <div class="modal-top">
+          <div>
+            <div class="modal-title">Добавить объект недвижимости</div>
+            <div class="modal-subtitle">Тип, районы, ЖК и кураторы подгружаются с сервера</div>
+          </div>
+          <button id="cancelCreateVariantBtn" class="icon-btn" type="button" aria-label="Закрыть">✕</button>
+        </div>
+
+        <form id="createVariantForm" class="modal-form" autocomplete="off">
+          <div class="modal-grid modal-grid-variants">
+            <div class="field">
+              <label for="variantType">Тип недвижимости <span class="req">*</span></label>
+              <select id="variantType" required>
+                <option value="">Выберите тип</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <label for="variantPrice">Цена <span class="req">*</span></label>
+              <input id="variantPrice" type="number" min="0" step="0.01" placeholder="Например: 120000" required />
+            </div>
+
+            <div class="field">
+              <label>Цена за м² <span class="req">*</span></label>
+              <div id="variantPricePerMkvHint" class="hint-box" aria-live="polite">—</div>
+              <div class="field-hint">Считается из цены и площади</div>
+            </div>
+
+            <div class="field">
+              <label for="variantRukPrice">Рук. цена <span class="req">*</span></label>
+              <input id="variantRukPrice" type="number" min="0" step="0.01" placeholder="Например: 110000" required />
+            </div>
+
+            <div class="field span-2">
+              <label for="variantAddress">Адрес <span class="req">*</span></label>
+              <input id="variantAddress" type="text" placeholder="Улица, дом..." required />
+            </div>
+
+            <div class="field">
+              <label for="variantEtajnost">Этажность <span class="req">*</span></label>
+              <input id="variantEtajnost" type="number" min="0" step="1" placeholder="Например: 9" required />
+            </div>
+
+            <div class="field">
+              <label for="variantMkv">Площадь (м²) <span class="req">*</span></label>
+              <input id="variantMkv" type="number" min="0" step="0.01" placeholder="Например: 55.5" required />
+            </div>
+
+            <div class="field">
+              <label for="variantSubdistrict">Микрорайон</label>
+              <select id="variantSubdistrict">
+                <option value="">Сначала выберите район</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <label for="variantEtaj">Этаж <span class="req">*</span></label>
+              <input id="variantEtaj" type="number" min="0" step="1" placeholder="Например: 5" required />
+            </div>
+
+            <div class="field">
+              <label for="variantCurator">Куратор</label>
+              <select id="variantCurator">
+                <option value="">Выберите куратора</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <label for="variantDistrict">Район</label>
+              <select id="variantDistrict">
+                <option value="">Выберите район</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <label for="variantOwnerPhone">Телефон владельца</label>
+              <input id="variantOwnerPhone" type="text" placeholder="+996 …" />
+            </div>
+
+            <div class="field">
+              <label for="variantJk">ЖК</label>
+              <select id="variantJk">
+                <option value="">Выберите ЖК</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <label for="variantStatus">Статус</label>
+              <input id="variantStatus" type="text" placeholder="Например: в продаже" />
+            </div>
+
+            <div class="field">
+              <label for="variantOwnerName">Имя владельца</label>
+              <input id="variantOwnerName" type="text" placeholder="ФИО" />
+            </div>
+
+            <div class="field">
+              <label for="variantPhone">Телефон</label>
+              <input id="variantPhone" type="text" placeholder="+996 …" />
+            </div>
+
+            <div id="variantApartmentFields" class="apartment-extra span-2 hidden">
+              <div class="modal-grid modal-grid-variants apartment-inner">
+                <div class="field">
+                  <label for="variantRepair">Ремонт</label>
+                  <input id="variantRepair" type="text" placeholder="Например: евроремонт" />
+                </div>
+                <div class="field">
+                  <label for="variantSeries">Серия</label>
+                  <input id="variantSeries" type="text" placeholder="Серия дома" />
+                </div>
+                <div class="field">
+                  <label for="variantRooms">Комнаты</label>
+                  <input id="variantRooms" type="text" placeholder="Например: 2" />
+                </div>
+              </div>
+            </div>
+
+            <div class="field span-2">
+              <label for="variantDescription">Описание</label>
+              <textarea id="variantDescription" rows="3" placeholder="Текст объявления"></textarea>
+            </div>
+
+            <div class="field span-2">
+              <label for="variantNotes">Заметки</label>
+              <textarea id="variantNotes" rows="2" placeholder="Внутренние заметки"></textarea>
+            </div>
+          </div>
+
+          <div id="createVariantError" class="alert hidden" role="alert"></div>
+
+          <div class="modal-actions">
+            <button id="createVariantBtn" class="primary-btn" type="submit">Добавить</button>
+            <button id="cancelCreateVariantBtn2" class="secondary-btn" type="button">Отмена</button>
+          </div>
+        </form>
+      </div>
     </div>
 
     <div id="toastHost" class="toast-host" aria-live="polite" aria-atomic="true"></div>

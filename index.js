@@ -779,6 +779,29 @@ app.get("/public/districts", async (req, res) => {
     if (connection) connection.release();
   }
 });
+
+// Список кураторов для формы объекта (любой авторизованный пользователь)
+app.get("/api/curators", authenticate, async (req, res) => {
+  let connection;
+  try {
+    connection = await pool.getConnection();
+    const [rows] = await connection.execute(
+      "SELECT id, first_name, last_name, email, role FROM users1 WHERE role IN ('REALTOR', 'SUPER_ADMIN', 'ADMIN') ORDER BY first_name ASC, last_name ASC"
+    );
+    const curators = rows.map((u) => ({
+      id: u.id,
+      name: `${u.first_name || ""} ${u.last_name || ""}`.trim() || String(u.email || u.id),
+      role: u.role,
+    }));
+    res.json(curators);
+  } catch (error) {
+    console.error("Error retrieving curators:", { message: error.message, stack: error.stack });
+    res.status(500).json({ error: `Внутренняя ошибка сервера: ${error.message}` });
+  } finally {
+    if (connection) connection.release();
+  }
+});
+
 // Get Subdistricts by District ID (Protected)
 app.get("/api/subdistricts", authenticate, async (req, res) => {
   const { district_id } = req.query;
@@ -1958,7 +1981,7 @@ app.post("/api/variants", authenticate, async (req, res) => {
 app.get("/public/properties/:id", async (req, res) => {
   const { id } = req.params;
 
-  // Fix route collision: this handler would otherwise intercept "/public/properties/types".111
+  // Fix route collision: this handler would otherwise intercept "/public/properties/types".
   if (id === "types") {
     return res.status(404).json({ error: "Endpoint не найден" });
   }

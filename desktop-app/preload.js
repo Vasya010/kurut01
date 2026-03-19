@@ -12,6 +12,10 @@ contextBridge.exposeInMainWorld("desktopApi", {
   getRaions: () => ipcRenderer.invoke("get-raions"),
   getUsers: () => ipcRenderer.invoke("get-users"),
   getPropertyTypes: () => ipcRenderer.invoke("get-property-types"),
+  getDistricts: () => ipcRenderer.invoke("get-districts"),
+  getSubdistricts: (districtId) => ipcRenderer.invoke("get-subdistricts", { districtId }),
+  getJkList: () => ipcRenderer.invoke("get-jk-list"),
+  getCurators: () => ipcRenderer.invoke("get-curators"),
   getVariants: (mode, id) => ipcRenderer.invoke("get-variants", { mode, id }),
   createVariant: (payload) => ipcRenderer.invoke("create-variant", payload),
 });
