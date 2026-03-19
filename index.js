@@ -1958,7 +1958,7 @@ app.post("/api/variants", authenticate, async (req, res) => {
 app.get("/public/properties/:id", async (req, res) => {
   const { id } = req.params;
 
-  // Fix route collision: this handler would otherwise intercept "/public/properties/types".
+  // Fix route collision: this handler would otherwise intercept "/public/properties/types".111
   if (id === "types") {
     return res.status(404).json({ error: "Endpoint не найден" });
   }
