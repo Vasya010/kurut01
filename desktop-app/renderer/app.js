@@ -499,20 +499,18 @@ async function loadCreateVariantReference() {
   }
   if (variantCuratorSelect) {
     variantCuratorSelect.innerHTML = "";
-    const ph = document.createElement("option");
-    ph.value = "";
-    ph.textContent = role === "REALTOR" ? "Вы (по умолчанию — вы)" : "Выберите куратора";
-    variantCuratorSelect.appendChild(ph);
-
     if (role === "REALTOR" && myId != null) {
       const o = document.createElement("option");
       o.value = String(myId);
-      o.textContent = myName || `ID ${myId}`;
-      o.selected = true;
+      o.textContent = myName ? `Куратор: ${myName}` : `Куратор (ID ${myId})`;
       variantCuratorSelect.appendChild(o);
       variantCuratorSelect.disabled = true;
     } else {
       variantCuratorSelect.disabled = false;
+      const ph = document.createElement("option");
+      ph.value = "";
+      ph.textContent = "Выберите куратора";
+      variantCuratorSelect.appendChild(ph);
       const list = Array.isArray(curators) ? curators : [];
       for (const c of list) {
         const o = document.createElement("option");
@@ -1051,7 +1049,7 @@ if (createVariantForm) {
     setVariantsUiLoading(createVariantBtn, true);
     try {
       await window.desktopApi.createVariant(payload);
-      toast("Готово", "Вариант создан.");
+      toast("Готово", "Объект добавлен.");
       setCreatePanelOpen(false);
       createVariantForm.reset();
       await renderVariants();
