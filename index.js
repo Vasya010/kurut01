@@ -1067,10 +1067,8 @@ app.delete("/api/subraions/:id", authenticate, async (req, res) => {
 });
 
 // Create New Property (Protected, SUPER_ADMIN or REALTOR)
-app.post("/api/properties", authenticate, upload.fields([
-  { name: "photos", maxCount: 10 },
-  { name: "document", maxCount: 1 },
-]), async (req, res) => {
+// Use upload.any() to prevent Multer "Unexpected field" errors.
+app.post("/api/properties", authenticate, upload.any(), async (req, res) => {
   if (!["SUPER_ADMIN", "REALTOR"].includes(req.user.role)) {
     return res.status(403).json({ error: "Доступ запрещён: требуется роль SUPER_ADMIN или REALTOR" });
   }
@@ -1100,17 +1098,24 @@ app.post("/api/properties", authenticate, upload.fields([
     etajnost,
   } = req.body;
 
-  const photos = req.files["photos"] ? req.files["photos"].map(file => ({
-    filename: `${Date.now()}-${Math.round(Math.random() * 1e9)}${path.extname(file.originalname)}`,
-    buffer: file.buffer,
-    mimetype: file.mimetype,
-  })) : [];
+  const allFiles = Array.isArray(req.files) ? req.files : [];
+  const photos = allFiles
+    .filter((f) => f && f.fieldname === "photos")
+    .slice(0, 10)
+    .map((file) => ({
+      filename: `${Date.now()}-${Math.round(Math.random() * 1e9)}${path.extname(file.originalname)}`,
+      buffer: file.buffer,
+      mimetype: file.mimetype,
+    }));
 
-  const document = req.files["document"] ? {
-    filename: `${Date.now()}-${Math.round(Math.random() * 1e9)}${path.extname(req.files["document"][0].originalname)}`,
-    buffer: req.files["document"][0].buffer,
-    mimetype: req.files["document"][0].mimetype,
-  } : null;
+  const docFiles = allFiles.filter((f) => f && f.fieldname === "document").slice(0, 1);
+  const document = docFiles[0]
+    ? {
+        filename: `${Date.now()}-${Math.round(Math.random() * 1e9)}${path.extname(docFiles[0].originalname)}`,
+        buffer: docFiles[0].buffer,
+        mimetype: docFiles[0].mimetype,
+      }
+    : null;
 
   if (!type_id || !price || !rukprice || !mkv || !address || !etaj || !etajnost) {
     return res.status(400).json({ error: "Все обязательные поля (type_id, price, rukprice, mkv, address, etaj, etajnost) должны быть заполнены" });
@@ -1297,10 +1302,8 @@ app.post("/api/properties", authenticate, upload.fields([
 });
 
 // Update Property (Protected, SUPER_ADMIN or REALTOR)
-app.put("/api/properties/:id", authenticate, upload.fields([
-  { name: "photos", maxCount: 10 },
-  { name: "document", maxCount: 1 },
-]), async (req, res) => {
+// Use upload.any() to prevent Multer "Unexpected field" errors.
+app.put("/api/properties/:id", authenticate, upload.any(), async (req, res) => {
   if (!["SUPER_ADMIN", "REALTOR"].includes(req.user.role)) {
     return res.status(403).json({ error: "Доступ запрещён: требуется роль SUPER_ADMIN или REALTOR" });
   }
@@ -1332,17 +1335,24 @@ app.put("/api/properties/:id", authenticate, upload.fields([
     existingPhotos,
   } = req.body;
 
-  const photos = req.files["photos"] ? req.files["photos"].map(file => ({
-    filename: `${Date.now()}-${Math.round(Math.random() * 1e9)}${path.extname(file.originalname)}`,
-    buffer: file.buffer,
-    mimetype: file.mimetype,
-  })) : [];
+  const allFiles = Array.isArray(req.files) ? req.files : [];
+  const photos = allFiles
+    .filter((f) => f && f.fieldname === "photos")
+    .slice(0, 10)
+    .map((file) => ({
+      filename: `${Date.now()}-${Math.round(Math.random() * 1e9)}${path.extname(file.originalname)}`,
+      buffer: file.buffer,
+      mimetype: file.mimetype,
+    }));
 
-  const document = req.files["document"] ? {
-    filename: `${Date.now()}-${Math.round(Math.random() * 1e9)}${path.extname(req.files["document"][0].originalname)}`,
-    buffer: req.files["document"][0].buffer,
-    mimetype: req.files["document"][0].mimetype,
-  } : null;
+  const docFiles = allFiles.filter((f) => f && f.fieldname === "document").slice(0, 1);
+  const document = docFiles[0]
+    ? {
+        filename: `${Date.now()}-${Math.round(Math.random() * 1e9)}${path.extname(docFiles[0].originalname)}`,
+        buffer: docFiles[0].buffer,
+        mimetype: docFiles[0].mimetype,
+      }
+    : null;
 
   if (!type_id || !price || !rukprice || !mkv || !address || !etaj || !etajnost) {
     return res.status(400).json({ error: "Все обязательные поля (type_id, price, rukprice, mkv, address, etaj, etajnost) должны быть заполнены" });

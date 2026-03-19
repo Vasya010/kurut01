@@ -90,19 +90,30 @@
             <div id="loginError" class="alert hidden" role="alert"></div>
           </form>
 
-          <details class="connection">
-            <summary>Настройки подключения</summary>
-            <div class="field compact">
-              <label for="baseUrl">API Base URL</label>
-              <input id="baseUrl" type="url" placeholder="https://vasya010-kurut01-710e.twc1.net" />
-              <div class="hint">По умолчанию установлен домен вашего бэкенда.</div>
+          <div class="connection-card">
+            <div class="connection-head">
+              <div class="connection-title">
+                Настройки подключения
+                <span id="serverPill" class="server-pill">HTTP API</span>
+              </div>
+              <div class="connection-subtitle">Введите Base URL и нажмите «Проверить»</div>
             </div>
+
+            <div class="connection-grid">
+              <div class="field compact">
+                <label for="baseUrl">API Base URL</label>
+                <input id="baseUrl" type="url" placeholder="https://vasya010-kurut01-710e.twc1.net" />
+                <div class="hint">По умолчанию установлен домен вашего бэкенда.</div>
+              </div>
+
+              <div class="connection-actions-col">
+                <button id="testBaseUrlBtn" class="secondary-btn compact" type="button">Проверить</button>
+                <button id="saveBaseUrlBtn" class="secondary-btn" type="button">Сохранить</button>
+              </div>
+            </div>
+
             <div id="connectionStatus" class="conn-status hidden" aria-live="polite"></div>
-            <div class="connection-actions">
-              <button id="testBaseUrlBtn" class="secondary-btn compact" type="button">Проверить</button>
-              <button id="saveBaseUrlBtn" class="secondary-btn" type="button">Сохранить</button>
-            </div>
-          </details>
+          </div>
 
           <div class="auth-footer">
             <span class="dot"></span>
