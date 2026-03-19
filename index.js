@@ -1762,8 +1762,9 @@ app.get("/api/listings", authenticate, async (req, res) => {
 
 
 // Get Variants (Properties) with optional filtering for "all" or "mine"
-// mode=all: return all properties
-// mode=mine: for SUPER_ADMIN -> all, for REALTOR -> where curator_id = req.user.id
+// REALTOR: всегда только объекты, где curator_id = текущий пользователь (не видит чужие)
+// mode=mine: для SUPER_ADMIN — без доп. фильтра; для REALTOR — то же самое, что и mode=all
+// mode=all: SUPER_ADMIN / прочие роли (кроме REALTOR) — все объекты
 // Optional: id query param to filter by property id
 app.get("/api/variants", authenticate, async (req, res) => {
   const { mode = "all", id } = req.query;
@@ -1792,13 +1793,11 @@ app.get("/api/variants", authenticate, async (req, res) => {
       params.push(propertyId);
     }
 
-    if (mode === "mine") {
-      if (req.user.role === "SUPER_ADMIN") {
-        // no extra where
-      } else if (req.user.role === "REALTOR") {
-        whereParts.push("p.curator_id = ?");
-        params.push(req.user.id);
-      } else {
+    if (req.user.role === "REALTOR") {
+      whereParts.push("p.curator_id = ?");
+      params.push(req.user.id);
+    } else if (mode === "mine") {
+      if (req.user.role !== "SUPER_ADMIN") {
         return res.status(403).json({ error: "Доступ запрещён" });
       }
     }
@@ -1825,6 +1824,89 @@ app.get("/api/variants", authenticate, async (req, res) => {
     res.json(variants);
   } catch (error) {
     console.error("Error retrieving variants:", { message: error.message, stack: error.stack });
+    res.status(500).json({ error: `Внутренняя ошибка сервера: ${error.message}` });
+  } finally {
+    if (connection) connection.release();
+  }
+});
+
+// Один вариант с фото и полями (REALTOR — только свой объект)
+app.get("/api/variants/:id", authenticate, async (req, res) => {
+  if (!["SUPER_ADMIN", "REALTOR"].includes(req.user.role)) {
+    return res.status(403).json({ error: "Доступ запрещён" });
+  }
+
+  const pid = parseInt(String(req.params.id), 10);
+  if (!Number.isFinite(pid)) {
+    return res.status(400).json({ error: "Некорректный ID" });
+  }
+
+  let connection;
+  try {
+    connection = await pool.getConnection();
+    const [rows] = await connection.execute(
+      `SELECT p.*, CONCAT(u.first_name, ' ', u.last_name) AS curator_name
+       FROM properties p
+       LEFT JOIN users1 u ON p.curator_id = u.id
+       WHERE p.id = ?`,
+      [pid]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ error: "Объект не найден" });
+    }
+
+    const row = rows[0];
+    if (req.user.role === "REALTOR" && Number(row.curator_id) !== Number(req.user.id)) {
+      return res.status(403).json({ error: "Нет доступа к этому объекту" });
+    }
+
+    let parsedPhotos = [];
+    if (row.photos) {
+      try {
+        parsedPhotos = JSON.parse(row.photos) || [];
+      } catch (e) {
+        console.warn(`Error parsing photos for variant ${pid}:`, e.message);
+        parsedPhotos = [];
+      }
+    }
+
+    const property = {
+      id: row.id,
+      type_id: row.type_id || null,
+      repair: row.repair || null,
+      series: row.series || null,
+      zhk_id: row.zhk_id || null,
+      price: row.price || null,
+      rukprice: row.rukprice || null,
+      unit: row.unit || null,
+      mkv: row.mkv || null,
+      rooms: row.rooms || null,
+      phone: row.phone || null,
+      district_id: row.district_id || null,
+      subdistrict_id: row.subdistrict_id || null,
+      address: row.address || null,
+      notes: row.notes || null,
+      description: row.description || null,
+      status: row.status || null,
+      etaj: row.etaj || null,
+      etajnost: row.etajnost || null,
+      owner_name: row.owner_name || null,
+      owner_phone: row.owner_phone || null,
+      curator_id: row.curator_id || null,
+      curator_name: row.curator_name || null,
+      owner_id: row.owner_id || null,
+      latitude: row.latitude || null,
+      longitude: row.longitude || null,
+      photos: parsedPhotos.map((img) => `https://s3.twcstorage.ru/${bucketName}/${img}`),
+      document: row.document ? `https://s3.twcstorage.ru/${bucketName}/${row.document}` : null,
+      date: new Date(row.created_at).toLocaleDateString("ru-RU"),
+      time: new Date(row.created_at).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }),
+    };
+
+    res.json(property);
+  } catch (error) {
+    console.error("Error retrieving variant:", { message: error.message, stack: error.stack });
     res.status(500).json({ error: `Внутренняя ошибка сервера: ${error.message}` });
   } finally {
     if (connection) connection.release();

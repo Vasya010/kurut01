@@ -294,6 +294,25 @@ ipcMain.handle("get-variants", async (_event, { mode = "all", id = null } = {}) 
   return Array.isArray(variants) ? variants : [];
 });
 
+ipcMain.handle("get-variant-detail", async (_event, { id } = {}) => {
+  const token = await getToken();
+  if (!token) throw new Error("Не авторизован");
+  const sid = id !== undefined && id !== null ? String(id).trim() : "";
+  if (!sid) throw new Error("ID не указан");
+  try {
+    return await apiFetch(`/api/variants/${encodeURIComponent(sid)}`, { method: "GET", token });
+  } catch (err) {
+    if (err && err.status === 401) {
+      const s = store;
+      if (s) {
+        s.delete("token");
+        s.delete("user");
+      }
+    }
+    throw err;
+  }
+});
+
 ipcMain.handle("create-variant", async (_event, payload = {}) => {
   const token = await getToken();
   if (!token) throw new Error("Не авторизован");

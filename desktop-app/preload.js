@@ -17,6 +17,7 @@ contextBridge.exposeInMainWorld("desktopApi", {
   getJkList: () => ipcRenderer.invoke("get-jk-list"),
   getCurators: () => ipcRenderer.invoke("get-curators"),
   getVariants: (mode, id) => ipcRenderer.invoke("get-variants", { mode, id }),
+  getVariantDetail: (id) => ipcRenderer.invoke("get-variant-detail", { id }),
   createVariant: (payload) => ipcRenderer.invoke("create-variant", payload),
 });
 

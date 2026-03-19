@@ -87,6 +87,26 @@ const variantSeriesInput = $("variantSeries");
 const variantRoomsInput = $("variantRooms");
 const variantPricePerMkvHint = $("variantPricePerMkvHint");
 
+const variantsPanelSubtitle = $("variantsPanelSubtitle");
+
+const variantDetailPanel = $("variantDetailPanel");
+const variantDetailBackdrop = $("variantDetailBackdrop");
+const variantDetailCloseBtn = $("variantDetailCloseBtn");
+const variantDetailLoading = $("variantDetailLoading");
+const variantDetailError = $("variantDetailError");
+const variantDetailContent = $("variantDetailContent");
+const variantDetailTitle = $("variantDetailTitle");
+const variantDetailSubtitle = $("variantDetailSubtitle");
+const variantDetailImg = $("variantDetailImg");
+const variantDetailNoPhotos = $("variantDetailNoPhotos");
+const variantDetailPrev = $("variantDetailPrev");
+const variantDetailNext = $("variantDetailNext");
+const variantDetailCounter = $("variantDetailCounter");
+const variantDetailThumbs = $("variantDetailThumbs");
+const variantDetailInfo = $("variantDetailInfo");
+const variantDetailDocRow = $("variantDetailDocRow");
+const variantDetailDocLink = $("variantDetailDocLink");
+
 const toastHost = $("toastHost");
 
 const loadingOverlay = $("loadingOverlay");
@@ -366,6 +386,83 @@ async function renderUsers() {
 
 let variantsMode = "all";
 let variantTypesLoaded = false;
+/** @type {Record<string, unknown> | null} */
+let dashboardUser = null;
+
+let variantDetailPhotos = [];
+let variantDetailSlideIndex = 0;
+
+const VARIANT_DETAIL_LABELS = {
+  id: "ID",
+  type_id: "Тип",
+  price: "Цена",
+  rukprice: "Рук. цена",
+  unit: "Ед. / примечание",
+  mkv: "Площадь, м²",
+  address: "Адрес",
+  district_id: "ID района",
+  subdistrict_id: "ID микрорайона",
+  zhk_id: "ID ЖК",
+  etaj: "Этаж",
+  etajnost: "Этажность",
+  rooms: "Комнаты",
+  repair: "Ремонт",
+  series: "Серия",
+  status: "Статус",
+  owner_name: "Владелец",
+  owner_phone: "Тел. владельца",
+  phone: "Телефон",
+  curator_name: "Куратор",
+  curator_id: "ID куратора",
+  description: "Описание",
+  notes: "Заметки",
+  latitude: "Широта",
+  longitude: "Долгота",
+  date: "Дата",
+  time: "Время",
+};
+
+const VARIANT_DETAIL_ORDER = [
+  "id",
+  "type_id",
+  "price",
+  "rukprice",
+  "mkv",
+  "unit",
+  "address",
+  "district_id",
+  "subdistrict_id",
+  "zhk_id",
+  "etaj",
+  "etajnost",
+  "rooms",
+  "repair",
+  "series",
+  "status",
+  "owner_name",
+  "owner_phone",
+  "phone",
+  "curator_name",
+  "curator_id",
+  "description",
+  "notes",
+  "latitude",
+  "longitude",
+  "date",
+  "time",
+];
+
+function applyVariantsToolbarForRole() {
+  const role = dashboardUser && dashboardUser.role;
+  if (variantsModeAllBtn) {
+    if (role === "REALTOR") {
+      variantsModeAllBtn.classList.add("hidden");
+      if (variantsMode !== "mine") setVariantsMode("mine");
+    } else {
+      variantsModeAllBtn.classList.remove("hidden");
+    }
+  }
+}
 
 function setVariantsMode(mode) {
   variantsMode = mode === "mine" ? "mine" : "all";
@@ -550,6 +647,8 @@ async function renderVariants() {
 
     for (const row of safe) {
       const tr = document.createElement("tr");
+      tr.classList.add("variant-row-clickable");
+      tr.title = "Нажмите, чтобы открыть карточку с фото";
       const priceText = row.price === null || row.price === undefined ? "—" : escapeHtml(row.price);
       const areaText = row.area === null || row.area === undefined ? "—" : escapeHtml(row.area);
       const districtText = row.district === null || row.district === undefined ? "—" : escapeHtml(row.district);
@@ -564,6 +663,9 @@ async function renderVariants() {
         <td>${priceText}</td>
         <td>${statusText}</td>
       `;
+      tr.addEventListener("click", () => {
+        openVariantDetailPanel(row.id);
+      });
       variantsTbody.appendChild(tr);
     }
   } catch (err) {
@@ -616,7 +718,17 @@ function setActiveView(tab) {
       pageSubtitleEl.textContent = "Пользователи и роли";
     } else if (tab === "types") {
       pageTitleEl.textContent = "Админ panel";
-      pageSubtitleEl.textContent = "Мои и все варианты";
+      if (dashboardUser && dashboardUser.role === "REALTOR") {
+        pageSubtitleEl.textContent = "Только ваши объекты";
+      } else {
+        pageSubtitleEl.textContent = "Мои и все варианты";
+      }
+      if (variantsPanelSubtitle) {
+        variantsPanelSubtitle.textContent =
+          dashboardUser && dashboardUser.role === "REALTOR"
+            ? "Риелтор видит только объекты, где он указан куратором"
+            : "Мои и все варианты с фильтром по ID";
+      }
     }
   }
 
@@ -628,6 +740,7 @@ async function showDashboard(auth) {
   setHidden(dashboardView, false);
 
   const user = auth && auth.user ? auth.user : null;
+  dashboardUser = user;
   userNameEl.textContent = user ? (user.name || `${user.first_name || ""} ${user.last_name || ""}`.trim() || user.email || "Пользователь") : "Пользователь";
   userRoleEl.textContent = user ? (user.role || "—") : "—";
   userAvatarEl.textContent = computeUserAvatarInitials(user);
@@ -826,6 +939,7 @@ logoutBtn.addEventListener("click", async () => {
   try {
     await window.desktopApi.clearAuth();
   } catch {}
+  dashboardUser = null;
   await showLogin();
   emailInput.focus();
   hideLoading();

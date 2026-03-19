@@ -265,7 +265,7 @@
             <div class="panel">
               <div class="panel-header">
                 <div class="panel-title">Варианты</div>
-                <div class="panel-subtitle">Мои и все варианты с фильтром по ID</div>
+                <div id="variantsPanelSubtitle" class="panel-subtitle">Мои и все варианты с фильтром по ID</div>
               </div>
 
               <div class="variants-toolbar">
@@ -309,6 +309,40 @@
           </div>
         </section>
       </main>
+    </div>
+
+    <div id="variantDetailPanel" class="modal hidden" role="dialog" aria-modal="true" aria-label="Карточка объекта">
+      <div id="variantDetailBackdrop" class="modal-backdrop"></div>
+      <div class="modal-sheet modal-sheet--wide">
+        <div class="modal-top">
+          <div>
+            <div id="variantDetailTitle" class="modal-title">Объект</div>
+            <div id="variantDetailSubtitle" class="modal-subtitle">Нажмите строку в таблице, чтобы открыть</div>
+          </div>
+          <button id="variantDetailCloseBtn" class="icon-btn" type="button" aria-label="Закрыть">✕</button>
+        </div>
+        <div class="modal-form variant-detail-body">
+          <div id="variantDetailLoading" class="variant-detail-loading hidden">Загрузка…</div>
+          <div id="variantDetailError" class="alert hidden" role="alert"></div>
+          <div id="variantDetailContent" class="hidden">
+            <div class="variant-slider-wrap">
+              <button id="variantDetailPrev" class="slider-nav" type="button" aria-label="Предыдущее фото">‹</button>
+              <div class="variant-slider-frame">
+                <img id="variantDetailImg" class="variant-slider-img" alt="Фото объекта" />
+                <div id="variantDetailNoPhotos" class="variant-no-photos hidden">Нет фотографий</div>
+              </div>
+              <button id="variantDetailNext" class="slider-nav" type="button" aria-label="Следующее фото">›</button>
+            </div>
+            <div id="variantDetailCounter" class="variant-slider-counter"></div>
+            <div id="variantDetailThumbs" class="variant-thumbs" aria-label="Миниатюры"></div>
+            <div id="variantDetailInfo" class="variant-detail-grid"></div>
+            <div id="variantDetailDocRow" class="variant-doc-row hidden">
+              <span class="muted">Документ:</span>
+              <a id="variantDetailDocLink" href="#" target="_blank" rel="noopener">Открыть</a>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div id="createVariantPanel" class="modal hidden" role="dialog" aria-modal="true" aria-label="Создать вариант">
