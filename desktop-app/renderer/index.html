@@ -80,6 +80,13 @@
               <div id="passwordError" class="field-error hidden" role="alert"></div>
             </div>
 
+            <div class="field">
+              <label class="checkbox-row">
+                <input id="rememberEmail" type="checkbox" />
+                <span>Запомнить email на этом ПК</span>
+              </label>
+            </div>
+
             <div class="form-actions">
               <button id="loginBtn" class="primary-btn" type="submit">
                 <span class="btn-text">Войти</span>
@@ -104,6 +111,7 @@
                 <label for="baseUrl">API Base URL</label>
                 <input id="baseUrl" type="url" placeholder="https://vasya010-kurut01-710e.twc1.net" />
                 <div class="hint">По умолчанию установлен домен вашего бэкенда.</div>
+                <div id="baseUrlSavedStatus" class="hint" aria-live="polite"></div>
               </div>
 
               <div class="connection-actions-col">
@@ -117,7 +125,7 @@
 
           <div class="auth-footer">
             <span class="dot"></span>
-            <span>Работает для Windows (ПК).</span>
+            <span>Работает для Windows (ПК). Версия 1.0</span>
           </div>
         </div>
       </div>
@@ -157,6 +165,7 @@
           </div>
           <div class="topbar-actions">
             <button id="refreshBtn" class="secondary-btn compact" type="button">Обновить</button>
+            <button id="openSettingsBtn" class="secondary-btn compact" type="button">Настройки</button>
           </div>
         </header>
 
@@ -256,8 +265,65 @@
                 </table>
               </div>
 
+              <div class="create-actions">
+                <button id="addUserBtn" class="secondary-btn compact" type="button">Добавить пользователя</button>
+              </div>
+
               <div id="usersEmpty" class="empty hidden">Нет данных.</div>
               <div id="usersError" class="alert hidden" role="alert"></div>
+            </div>
+          </div>
+
+          <div id="userEditorPanel" class="modal hidden" role="dialog" aria-modal="true" aria-label="Редактор пользователя">
+            <div id="userEditorBackdrop" class="modal-backdrop"></div>
+            <div class="modal-sheet modal-sheet--wide">
+              <div class="modal-top">
+                <div>
+                  <div id="userEditorTitle" class="modal-title">Пользователь</div>
+                  <div id="userEditorSubtitle" class="modal-subtitle">Добавление или изменение</div>
+                </div>
+                <button id="userEditorCloseBtn" class="icon-btn" type="button" aria-label="Закрыть">✕</button>
+              </div>
+
+              <form id="userEditorForm" class="modal-form" autocomplete="off">
+                <div id="userEditorError" class="alert hidden" role="alert"></div>
+
+                <div class="modal-grid modal-grid-variants">
+                  <div class="field">
+                    <label for="userEditorName">ФИО</label>
+                    <input id="userEditorName" type="text" placeholder="Например: Василий К" required />
+                  </div>
+                  <div class="field">
+                    <label for="userEditorRole">Роль</label>
+                    <select id="userEditorRole" required>
+                      <option value="SUPER_ADMIN">SUPER_ADMIN</option>
+                      <option value="ADMIN">ADMIN</option>
+                      <option value="REALTOR">REALTOR</option>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label for="userEditorEmail">Email</label>
+                    <input id="userEditorEmail" type="email" placeholder="you@example.com" required />
+                  </div>
+                  <div class="field">
+                    <label for="userEditorPhone">Телефон</label>
+                    <input id="userEditorPhone" type="text" placeholder="+996 ..." required />
+                  </div>
+                  <div class="field span-2">
+                    <label for="userEditorPassword">Новый пароль (для изменения)</label>
+                    <input id="userEditorPassword" type="password" placeholder="Оставьте пустым, если не менять" />
+                  </div>
+                  <div class="field span-2">
+                    <label for="userEditorPhoto">Фото (опционально)</label>
+                    <input id="userEditorPhoto" type="file" accept="image/*" />
+                  </div>
+                </div>
+
+                <div class="modal-actions">
+                  <button id="userEditorSubmitBtn" class="primary-btn" type="submit">Сохранить</button>
+                  <button id="userEditorCancelBtn" class="secondary-btn" type="button">Отмена</button>
+                </div>
+              </form>
             </div>
           </div>
 
@@ -340,6 +406,77 @@
               <span class="muted">Документ:</span>
               <a id="variantDetailDocLink" href="#" target="_blank" rel="noopener">Открыть</a>
             </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="settingsPanel" class="modal hidden" role="dialog" aria-modal="true" aria-label="Настройки интерфейса">
+      <div id="settingsBackdrop" class="modal-backdrop"></div>
+      <div class="modal-sheet">
+        <div class="modal-top">
+          <div>
+            <div class="modal-title">Настройки</div>
+            <div id="settingsSubtitle" class="modal-subtitle">Тема, автообновление и поведение интерфейса</div>
+          </div>
+          <button id="settingsCloseBtn" class="icon-btn" type="button" aria-label="Закрыть">✕</button>
+        </div>
+
+        <div class="modal-form">
+          <div class="field">
+            <label>Тема</label>
+            <div class="segmented" role="tablist" aria-label="Режим темы">
+              <button id="themeModeSystem" class="seg-btn active" type="button">Система</button>
+              <button id="themeModeDark" class="seg-btn" type="button">Темная</button>
+              <button id="themeModeLight" class="seg-btn" type="button">Светлая</button>
+            </div>
+            <div id="systemThemePill" class="hint" aria-live="polite"></div>
+          </div>
+
+          <div class="field">
+            <div class="label-row">
+              <label for="autoRefreshEnabled">Автообновление</label>
+              <input id="autoRefreshEnabled" type="checkbox" />
+            </div>
+            <div class="filter-inline">
+              <label for="autoRefreshIntervalSec">Интервал</label>
+              <select id="autoRefreshIntervalSec">
+                <option value="15">15 секунд</option>
+                <option value="30">30 секунд</option>
+                <option value="60" selected>60 секунд</option>
+                <option value="120">120 секунд</option>
+              </select>
+            </div>
+            <div class="field-hint">Перезагружает текущую вкладку (варианты/объявления/районы/пользователи).</div>
+          </div>
+
+          <div class="field">
+            <div class="label-row">
+              <label for="animationsEnabled">Анимации UI</label>
+              <input id="animationsEnabled" type="checkbox" />
+            </div>
+            <div class="field-hint">Живое стекло, мягкие переливы и подсветки.</div>
+          </div>
+
+          <div class="field">
+            <div class="label-row">
+              <label for="loadingOverlayEnabled">Loading оверлей</label>
+              <input id="loadingOverlayEnabled" type="checkbox" />
+            </div>
+            <div class="field-hint">Показывается при запросах/проверках.</div>
+          </div>
+
+          <div class="field">
+            <div class="label-row">
+              <label for="autoOpenLastTab">Автопереход на последнюю вкладку</label>
+              <input id="autoOpenLastTab" type="checkbox" />
+            </div>
+            <div class="field-hint">Например, если ты был на «Варианты», то откроется именно она.</div>
+          </div>
+
+          <div class="create-actions">
+            <button id="settingsLogoutBtn" class="secondary-btn compact" type="button">Выйти</button>
+            <button id="clearSavedEmailBtn" class="ghost-btn" type="button">Очистить email</button>
           </div>
         </div>
       </div>
@@ -474,6 +611,17 @@
             <div class="field span-2">
               <label for="variantNotes">Заметки</label>
               <textarea id="variantNotes" rows="2" placeholder="Внутренние заметки"></textarea>
+            </div>
+
+            <div class="field span-2">
+              <label for="variantPhotos">Фотографии</label>
+              <input id="variantPhotos" type="file" accept="image/*" multiple />
+              <div class="field-hint">Можно выбрать несколько фото. Отправляется вместе с объектом.</div>
+            </div>
+
+            <div class="field span-2">
+              <label for="variantDocument">Документ</label>
+              <input id="variantDocument" type="file" accept=".pdf,image/*" />
             </div>
           </div>
 

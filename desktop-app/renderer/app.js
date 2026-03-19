@@ -18,9 +18,30 @@ const baseUrlInput = $("baseUrl");
 const saveBaseUrlBtn = $("saveBaseUrlBtn");
 const testBaseUrlBtn = $("testBaseUrlBtn");
 const connectionStatusEl = $("connectionStatus");
+const baseUrlSavedStatusEl = $("baseUrlSavedStatus");
+const rememberEmailCheckbox = $("rememberEmail");
 
 const logoutBtn = $("logoutBtn");
 const refreshBtn = $("refreshBtn");
+const openSettingsBtn = $("openSettingsBtn");
+const settingsPanel = $("settingsPanel");
+const settingsBackdrop = $("settingsBackdrop");
+const settingsCloseBtn = $("settingsCloseBtn");
+
+const themeModeSystemBtn = $("themeModeSystem");
+const themeModeDarkBtn = $("themeModeDark");
+const themeModeLightBtn = $("themeModeLight");
+const systemThemePill = $("systemThemePill");
+
+const autoRefreshEnabledInput = $("autoRefreshEnabled");
+const autoRefreshIntervalSecSelect = $("autoRefreshIntervalSec");
+
+const animationsEnabledInput = $("animationsEnabled");
+const loadingOverlayEnabledInput = $("loadingOverlayEnabled");
+const autoOpenLastTabInput = $("autoOpenLastTab");
+
+const settingsLogoutBtn = $("settingsLogoutBtn");
+const clearSavedEmailBtn = $("clearSavedEmailBtn");
 
 const userNameEl = $("userName");
 const userRoleEl = $("userRole");
@@ -45,6 +66,24 @@ const raionsError = $("raionsError");
 const usersTbody = $("usersTbody");
 const usersEmpty = $("usersEmpty");
 const usersError = $("usersError");
+const addUserBtn = $("addUserBtn");
+
+const userEditorPanel = $("userEditorPanel");
+const userEditorBackdrop = $("userEditorBackdrop");
+const userEditorCloseBtn = $("userEditorCloseBtn");
+const userEditorTitle = $("userEditorTitle");
+const userEditorSubtitle = $("userEditorSubtitle");
+const userEditorForm = $("userEditorForm");
+const userEditorError = $("userEditorError");
+const userEditorSubmitBtn = $("userEditorSubmitBtn");
+const userEditorCancelBtn = $("userEditorCancelBtn");
+
+const userEditorNameInput = $("userEditorName");
+const userEditorRoleSelect = $("userEditorRole");
+const userEditorEmailInput = $("userEditorEmail");
+const userEditorPhoneInput = $("userEditorPhone");
+const userEditorPasswordInput = $("userEditorPassword");
+const userEditorPhotoInput = $("userEditorPhoto");
 
 const variantsTbody = $("variantsTbody");
 const variantsEmpty = $("variantsEmpty");
@@ -86,6 +125,8 @@ const variantRepairInput = $("variantRepair");
 const variantSeriesInput = $("variantSeries");
 const variantRoomsInput = $("variantRooms");
 const variantPricePerMkvHint = $("variantPricePerMkvHint");
+const variantPhotosInput = $("variantPhotos");
+const variantDocumentInput = $("variantDocument");
 
 const variantsPanelSubtitle = $("variantsPanelSubtitle");
 
@@ -113,6 +154,7 @@ const loadingOverlay = $("loadingOverlay");
 const loadingSubtitle = $("loadingSubtitle");
 
 function showLoading(message) {
+  if (!loadingOverlayEnabled) return;
   if (!loadingOverlay) return;
   loadingOverlay.classList.remove("hidden");
   if (loadingSubtitle) {
@@ -121,6 +163,7 @@ function showLoading(message) {
 }
 
 function hideLoading() {
+  if (!loadingOverlayEnabled) return;
   if (!loadingOverlay) return;
   loadingOverlay.classList.add("hidden");
 }
@@ -136,6 +179,81 @@ const viewUsers = $("viewUsers");
 const viewTypes = $("viewTypes");
 
 let activeTab = "listings";
+
+// UI settings state (theme + автообновление)
+let themeMode = "system"; // system | dark | light
+let autoRefreshEnabled = false;
+let autoRefreshIntervalSec = 60;
+let autoRefreshTimer = null;
+
+let animationsEnabled = true;
+let loadingOverlayEnabled = true;
+let autoOpenLastTab = true;
+let lastTab = "listings";
+let lastTabPersistTimer = null;
+
+let authInvalid = false; // токен устарел; фоновые запросы не делаем
+
+function systemPrefersDark() {
+  if (typeof window === "undefined" || !window.matchMedia) return true;
+  return window.matchMedia("(prefers-color-scheme: dark)").matches;
+}
+
+if (typeof window !== "undefined" && window.matchMedia) {
+  const mql = window.matchMedia("(prefers-color-scheme: dark)");
+  // Update UI when OS theme changes and user is in "Система" mode.
+  const handler = () => applyThemeMode(themeMode);
+  if (mql.addEventListener) mql.addEventListener("change", handler);
+  else if (mql.addListener) mql.addListener(handler);
+}
+
+function applyThemeMode(nextMode) {
+  const mode = (nextMode || "system").toString().trim().toLowerCase();
+  themeMode = mode;
+
+  const effective = themeMode === "system" ? (systemPrefersDark() ? "dark" : "light") : themeMode;
+  document.body.classList.toggle("theme-light", effective === "light");
+
+  if (themeModeSystemBtn) themeModeSystemBtn.classList.toggle("active", themeMode === "system");
+  if (themeModeDarkBtn) themeModeDarkBtn.classList.toggle("active", themeMode === "dark");
+  if (themeModeLightBtn) themeModeLightBtn.classList.toggle("active", themeMode === "light");
+
+  if (systemThemePill) {
+    const sys = systemPrefersDark() ? "Тёмная" : "Светлая";
+    if (themeMode === "system") {
+      systemThemePill.textContent = `Система: ${sys}`;
+    } else {
+      systemThemePill.textContent = `Система: ${sys} (режим: ${themeMode === "dark" ? "Темная" : "Светлая"})`;
+    }
+  }
+}
+
+function stopAutoRefresh() {
+  if (autoRefreshTimer) {
+    clearInterval(autoRefreshTimer);
+    autoRefreshTimer = null;
+  }
+}
+
+async function refreshForActiveTab() {
+  if (activeTab === "listings") await renderListings();
+  else if (activeTab === "raions") await renderRaions();
+  else if (activeTab === "users") await renderUsers();
+  else if (activeTab === "types") {
+    applyVariantsToolbarForRole();
+    await renderVariants();
+  }
+}
+
+function startAutoRefreshIfNeeded() {
+  stopAutoRefresh();
+  if (!autoRefreshEnabled) return;
+  const ms = Math.max(10, Number(autoRefreshIntervalSec || 60)) * 1000;
+  autoRefreshTimer = setInterval(() => {
+    // Background refresh; errors are ignored to keep UI stable.
+    refreshForActiveTab().catch(() => {});
+  }, ms);
+}
 
 function setHidden(el, hidden) {
   el.classList.toggle("hidden", hidden);
@@ -241,8 +359,42 @@ function computeUserAvatarInitials(user) {
 }
 
 async function loadSettings() {
-  const { baseUrl } = await window.desktopApi.getSettings();
+  const {
+    baseUrl,
+    themeMode: tm,
+    autoRefreshEnabled: are,
+    autoRefreshIntervalSec: aris,
+    rememberEmail,
+    lastEmail,
+    animationsEnabled: an,
+    loadingOverlayEnabled: loe,
+    autoOpenLastTab: aolt,
+    lastTab: lt,
+  } = await window.desktopApi.getSettings();
   baseUrlInput.value = baseUrl;
+  applyThemeMode(tm || "system");
+
+  autoRefreshEnabled = !!are;
+  autoRefreshIntervalSec = Number(aris ?? 60);
+
+  if (autoRefreshEnabledInput) autoRefreshEnabledInput.checked = autoRefreshEnabled;
+  if (autoRefreshIntervalSecSelect) autoRefreshIntervalSecSelect.value = String(autoRefreshIntervalSec);
+
+  animationsEnabled = an !== undefined ? !!an : true;
+  loadingOverlayEnabled = loe !== undefined ? !!loe : true;
+  autoOpenLastTab = aolt !== undefined ? !!aolt : true;
+  lastTab = lt || "listings";
+
+  if (animationsEnabledInput) animationsEnabledInput.checked = animationsEnabled;
+  if (loadingOverlayEnabledInput) loadingOverlayEnabledInput.checked = loadingOverlayEnabled;
+  if (autoOpenLastTabInput) autoOpenLastTabInput.checked = autoOpenLastTab;
+
+  document.body.classList.toggle("no-animations", !animationsEnabled);
+
+  if (rememberEmailCheckbox) {
+    rememberEmailCheckbox.checked = !!rememberEmail;
+    emailInput.value = rememberEmailCheckbox.checked ? String(lastEmail || "") : "";
+  }
 }
 
 async function renderListings() {
@@ -360,6 +512,9 @@ async function renderUsers() {
 
     if (safe.length === 0) return;
 
+    const isSuper = dashboardUser && dashboardUser.role === "SUPER_ADMIN";
+    if (addUserBtn) addUserBtn.classList.toggle("hidden", !isSuper);
+
     for (const user of safe) {
       const tr = document.createElement("tr");
       const fullName = (user && (user.name || user.first_name || user.last_name)) ? (user.name || "").toString() : "";
@@ -370,6 +525,13 @@ async function renderUsers() {
         <td>${escapeHtml(user.phone || "—")}</td>
         <td>${escapeHtml(user.role || "—")}</td>
       `;
+
+      if (isSuper) {
+        tr.classList.add("variant-row-clickable");
+        tr.title = "Нажмите, чтобы редактировать пользователя";
+        tr.addEventListener("click", () => openUserEditorEdit(user));
+      }
+
       usersTbody.appendChild(tr);
     }
   } catch (err) {
@@ -384,6 +546,179 @@ async function renderUsers() {
   }
 }
 
+function setUserEditorOpen(open) {
+  if (!userEditorPanel) return;
+  userEditorPanel.classList.toggle("hidden", !open);
+  if (open) {
+    document.body.style.overflow = "hidden";
+  } else {
+    const otherModalOpen =
+      (createVariantPanel && !createVariantPanel.classList.contains("hidden")) ||
+      (variantDetailPanel && !variantDetailPanel.classList.contains("hidden")) ||
+      (settingsPanel && !settingsPanel.classList.contains("hidden"));
+    document.body.style.overflow = otherModalOpen ? "hidden" : "";
+  }
+}
+
+function setUserEditorError(message) {
+  if (!userEditorError) return;
+  userEditorError.textContent = message || "";
+  setHidden(userEditorError, !message);
+}
+
+function resetUserEditorForm() {
+  if (userEditorForm) userEditorForm.reset();
+  if (userEditorPasswordInput) userEditorPasswordInput.value = "";
+  setUserEditorError("");
+  userEditorTargetId = null;
+}
+
+function openUserEditorCreate() {
+  userEditorMode = "create";
+  resetUserEditorForm();
+
+  if (userEditorTitle) userEditorTitle.textContent = "Добавить пользователя";
+  if (userEditorSubtitle) userEditorSubtitle.textContent = "Создание нового аккаунта (пароль обязателен)";
+
+  // Defaults
+  if (userEditorRoleSelect) userEditorRoleSelect.value = "REALTOR";
+  if (userEditorPasswordInput) userEditorPasswordInput.placeholder = "Введите пароль";
+  if (userEditorSubmitBtn) userEditorSubmitBtn.textContent = "Создать";
+
+  // In create mode password is required (validated in submit handler).
+  if (userEditorForm) userEditorForm.dataset.mode = "create";
+
+  setUserEditorOpen(true);
+}
+
+function openUserEditorEdit(user) {
+  userEditorMode = "edit";
+  resetUserEditorForm();
+
+  const u = user || {};
+  userEditorTargetId = u.id;
+
+  if (userEditorTitle) userEditorTitle.textContent = "Редактировать пользователя";
+  if (userEditorSubtitle) userEditorSubtitle.textContent = "Данные и опциональная смена пароля";
+
+  if (userEditorNameInput) userEditorNameInput.value = u.name || "";
+  if (userEditorRoleSelect) userEditorRoleSelect.value = u.role || "REALTOR";
+  if (userEditorEmailInput) userEditorEmailInput.value = u.email || "";
+  if (userEditorPhoneInput) userEditorPhoneInput.value = u.phone || "";
+
+  if (userEditorPasswordInput) {
+    userEditorPasswordInput.value = "";
+    userEditorPasswordInput.placeholder = "Новый пароль (пусто = не менять)";
+  }
+  if (userEditorSubmitBtn) userEditorSubmitBtn.textContent = "Сохранить изменения";
+  if (userEditorForm) userEditorForm.dataset.mode = "edit";
+
+  setUserEditorOpen(true);
+}
+
+function fileToBase64(file) {
+  if (!file) return Promise.resolve(null);
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = String(reader.result || "");
+      const commaIdx = result.indexOf(",");
+      if (commaIdx >= 0) resolve(result.slice(commaIdx + 1));
+      else resolve(result);
+    };
+    reader.onerror = () => reject(new Error("Не удалось прочитать файл"));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function buildUserEditorPhotoPayload() {
+  if (!userEditorPhotoInput || !userEditorPhotoInput.files || !userEditorPhotoInput.files[0]) return null;
+  const f = userEditorPhotoInput.files[0];
+  const base64 = await fileToBase64(f);
+  return { base64, filename: f.name || "photo", mime: f.type || "application/octet-stream" };
+}
+
+if (addUserBtn) {
+  addUserBtn.addEventListener("click", () => {
+    const role = dashboardUser && dashboardUser.role;
+    if (role !== "SUPER_ADMIN") {
+      toast("Нет доступа", "Только SUPER_ADMIN может добавлять пользователей.", "danger");
+      return;
+    }
+    openUserEditorCreate();
+  });
+}
+
+if (userEditorCloseBtn) userEditorCloseBtn.addEventListener("click", () => setUserEditorOpen(false));
+if (userEditorCancelBtn) userEditorCancelBtn.addEventListener("click", () => setUserEditorOpen(false));
+if (userEditorBackdrop) userEditorBackdrop.addEventListener("click", () => setUserEditorOpen(false));
+
+if (userEditorForm) {
+  userEditorForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    setUserEditorError("");
+
+    const name = userEditorNameInput ? userEditorNameInput.value.trim() : "";
+    const role = userEditorRoleSelect ? userEditorRoleSelect.value : "";
+    const email = userEditorEmailInput ? userEditorEmailInput.value.trim() : "";
+    const phone = userEditorPhoneInput ? userEditorPhoneInput.value.trim() : "";
+    const password = userEditorPasswordInput ? userEditorPasswordInput.value : "";
+
+    const isCreate = userEditorMode === "create";
+    const errors = [];
+    if (!name) errors.push("ФИО обязательно");
+    if (!role) errors.push("Роль обязательна");
+    if (!email) errors.push("Email обязателен");
+    if (!phone) errors.push("Телефон обязателен");
+    if (isCreate && (!password || password.trim() === "")) errors.push("Пароль обязателен");
+
+    if (errors.length) {
+      setUserEditorError(errors.join(". "));
+      return;
+    }
+
+    try {
+      if (!isCreate && !userEditorTargetId) throw new Error("ID пользователя не найден");
+
+      const photoPayload = await buildUserEditorPhotoPayload();
+
+      if (isCreate) {
+        await window.desktopApi.createUser({
+          email,
+          name,
+          phone,
+          role,
+          password,
+          photo: photoPayload,
+        });
+        toast("Готово", "Пользователь создан.");
+      } else {
+        await window.desktopApi.updateUser(userEditorTargetId, {
+          email,
+          name,
+          phone,
+          role,
+          password,
+          photo: photoPayload,
+        });
+        toast("Готово", "Пользователь обновлён.");
+      }
+
+      setUserEditorOpen(false);
+      resetUserEditorForm();
+      await renderUsers();
+    } catch (err) {
+      const message = (err && err.message) ? err.message : "Ошибка сохранения пользователя";
+      setUserEditorError(message);
+      toast("Ошибка", message, "danger");
+
+      if (err && err.status === 401) {
+        await showLogin("Сессия устарела. Выполните вход снова.");
+      }
+    }
+  });
+}
+
 let variantsMode = "all";
 let variantTypesLoaded = false;
 /** @type {Record<string, unknown> | null} */
@@ -391,6 +726,13 @@ let dashboardUser = null;
 
 let variantDetailPhotos = [];
 let variantDetailSlideIndex = 0;
+
+let renderVariantsInFlight = false;
+let superAdminMineFilterTaskId = 0;
+
+// User editor state
+let userEditorMode = "create"; // create | edit
+let userEditorTargetId = null;
 
 const VARIANT_DETAIL_LABELS = {
   id: "ID",
@@ -455,11 +797,13 @@ const VARIANT_DETAIL_ORDER = [
 function applyVariantsToolbarForRole() {
   const role = dashboardUser && dashboardUser.role;
   if (variantsModeAllBtn) {
-    if (role === "REALTOR") {
+    const isSuper = role === "SUPER_ADMIN";
+    if (isSuper) {
+      variantsModeAllBtn.classList.remove("hidden");
+      if (variantsMode !== "all") setVariantsMode("all");
+    } else {
       variantsModeAllBtn.classList.add("hidden");
       if (variantsMode !== "mine") setVariantsMode("mine");
-    } else {
-      variantsModeAllBtn.classList.remove("hidden");
     }
   }
 }
@@ -628,12 +972,28 @@ async function loadCreateVariantReference() {
 }
 
 async function renderVariants() {
+  if (authInvalid) return;
+  if (renderVariantsInFlight) return;
+  renderVariantsInFlight = true;
   setHidden(variantsError, true);
   showAlert(variantsEmpty, "");
   variantsEmpty.classList.add("hidden");
   variantsTbody.innerHTML = "";
 
+  const needClientFilterSuperAdminMine =
+    !!(dashboardUser && dashboardUser.role === "SUPER_ADMIN" && variantsMode === "mine");
+  const myId = needClientFilterSuperAdminMine ? Number(dashboardUser.id) : NaN;
+  const localTaskId = ++superAdminMineFilterTaskId;
+  /** @type {Map<number, HTMLTableRowElement>} */
+  const rowElById = new Map();
+
   try {
+    // Важно: для всех ролей кроме SUPER_ADMIN показываем только "Мои"
+    // (чтобы ни при каких условиях не отображать чужие варианты).
+    if (dashboardUser && dashboardUser.role !== "SUPER_ADMIN") {
+      applyVariantsToolbarForRole();
+    }
+
     const idValue = variantsIdFilterInput && variantsIdFilterInput.value ? variantsIdFilterInput.value.trim() : "";
     const idParam = idValue ? idValue : null;
 
@@ -644,6 +1004,30 @@ async function renderVariants() {
     setHidden(variantsEmpty, safe.length !== 0 ? true : false);
 
     if (safe.length === 0) return;
+
+    // SUPER_ADMIN + режим "Мои": на бэке может прилететь всё.
+    // Фильтруем до рендера, чтобы в таблице сразу был только "мой" список.
+    if (needClientFilterSuperAdminMine && safe.length && Number.isFinite(myId)) {
+      showLoading("Фильтрую ваши варианты...");
+      try {
+        const filtered = [];
+        for (let i = 0; i < safe.length; i++) {
+          if (authInvalid) return;
+          const row = safe[i];
+          const d = await window.desktopApi.getVariantDetail(row.id);
+          const curatorId = d ? Number(d.curator_id) : NaN;
+          if (Number.isFinite(curatorId) && curatorId === myId) {
+            filtered.push(row);
+          }
+        }
+        safe.splice(0, safe.length, ...filtered);
+      } finally {
+        hideLoading();
+      }
+
+      setHidden(variantsEmpty, safe.length !== 0 ? true : false);
+      if (safe.length === 0) return;
+    }
 
     for (const row of safe) {
       const tr = document.createElement("tr");
@@ -666,6 +1050,7 @@ async function renderVariants() {
       tr.addEventListener("click", () => {
         openVariantDetailPanel(row.id);
       });
+      rowElById.set(Number(row.id), tr);
       variantsTbody.appendChild(tr);
     }
   } catch (err) {
@@ -678,6 +1063,8 @@ async function renderVariants() {
     const message = (err && err.message) ? err.message : "Ошибка загрузки вариантов";
     showAlert(variantsError, message);
     setHidden(variantsEmpty, true);
+  } finally {
+    renderVariantsInFlight = false;
   }
 }
 
@@ -759,6 +1146,7 @@ function closeVariantDetailPanel() {
 
 async function openVariantDetailPanel(id) {
   if (!variantDetailPanel) return;
+  if (authInvalid) return;
   setHidden(variantDetailError, true);
   setHidden(variantDetailContent, true);
   setHidden(variantDetailLoading, false);
@@ -830,6 +1218,7 @@ function setActiveView(tab) {
   setHidden(statsWrap, tab !== "listings");
 
   activeTab = tab;
+  lastTab = tab;
 
   if (pageTitleEl && pageSubtitleEl) {
     if (tab === "listings") {
@@ -858,6 +1247,15 @@ function setActiveView(tab) {
   }
 
   setActiveNav(tab);
+
+  if (autoOpenLastTab) {
+    if (lastTabPersistTimer) clearTimeout(lastTabPersistTimer);
+    lastTabPersistTimer = setTimeout(() => {
+      if (window.desktopApi && window.desktopApi.setSettings) {
+        window.desktopApi.setSettings(undefined, { lastTab: tab }).catch(() => {});
+      }
+    }, 400);
+  }
 }
 
 async function showDashboard(auth) {
@@ -866,18 +1264,26 @@ async function showDashboard(auth) {
 
   const user = auth && auth.user ? auth.user : null;
   dashboardUser = user;
+  authInvalid = false;
   userNameEl.textContent = user ? (user.name || `${user.first_name || ""} ${user.last_name || ""}`.trim() || user.email || "Пользователь") : "Пользователь";
   userRoleEl.textContent = user ? (user.role || "—") : "—";
   userAvatarEl.textContent = computeUserAvatarInitials(user);
 
   // Default tab
-  setActiveView("listings");
-  await renderListings();
+  const allowedTabs = ["listings", "raions", "users", "types"];
+  const initialTab = autoOpenLastTab && allowedTabs.includes(lastTab) ? lastTab : "listings";
+  setActiveView(initialTab);
+  await refreshForActiveTab();
+  startAutoRefreshIfNeeded();
+  if (dashboardUser) applyVariantsToolbarForRole();
 }
 
 async function showLogin(message) {
   dashboardUser = null;
   closeVariantDetailPanel();
+  stopAutoRefresh();
+  setUserEditorOpen(false);
+  authInvalid = true;
 
   setHidden(dashboardView, true);
   setHidden(loginView, false);
@@ -942,6 +1348,40 @@ saveBaseUrlBtn.addEventListener("click", async () => {
     toast("Ошибка", (err && err.message) ? err.message : "Не удалось сохранить URL", "danger");
   }
 });
+
+// Auto-save Base URL as user types.
+let baseUrlAutoSaveTimer = null;
+let baseUrlLastAutoSaved = "";
+const BASE_URL_AUTOSAVE_DEBOUNCE_MS = 800;
+
+if (baseUrlInput) {
+  baseUrlInput.addEventListener("input", () => {
+    if (baseUrlSavedStatusEl) baseUrlSavedStatusEl.textContent = "";
+
+    if (baseUrlAutoSaveTimer) clearTimeout(baseUrlAutoSaveTimer);
+    baseUrlAutoSaveTimer = setTimeout(() => {
+      const value = baseUrlInput.value.trim();
+      if (!value) return;
+      if (baseUrlInput && !baseUrlInput.checkValidity()) return;
+      if (value === baseUrlLastAutoSaved) return;
+
+      if (baseUrlSavedStatusEl) baseUrlSavedStatusEl.textContent = "Сохраняю...";
+
+      window.desktopApi
+        .setSettings(value)
+        .then(() => {
+          baseUrlLastAutoSaved = value;
+          if (baseUrlSavedStatusEl) baseUrlSavedStatusEl.textContent = "Сохранено";
+          setTimeout(() => {
+            if (baseUrlSavedStatusEl) baseUrlSavedStatusEl.textContent = "";
+          }, 1200);
+        })
+        .catch(() => {
+          if (baseUrlSavedStatusEl) baseUrlSavedStatusEl.textContent = "Ошибка сохранения";
+        });
+    }, BASE_URL_AUTOSAVE_DEBOUNCE_MS);
+  });
+}
 
 testBaseUrlBtn.addEventListener("click", async () => {
   const value = baseUrlInput.value.trim();
@@ -1010,6 +1450,17 @@ passwordInput.addEventListener("input", () => {
   updateLoginButtonState();
 });
 
+function persistRememberEmail() {
+  if (!rememberEmailCheckbox) return;
+  const checked = !!rememberEmailCheckbox.checked;
+  const v = checked ? emailInput.value.trim() : "";
+  window.desktopApi.setSettings(undefined, { rememberEmail: checked, lastEmail: v }).catch(() => {});
+}
+
+if (rememberEmailCheckbox) {
+  rememberEmailCheckbox.addEventListener("change", persistRememberEmail);
+}
+
 loginForm.addEventListener("submit", async (e) => {
   e.preventDefault();
 
@@ -1033,6 +1484,9 @@ loginForm.addEventListener("submit", async (e) => {
   try {
     await window.desktopApi.login(email, password);
     toast("Успешно", "Вход выполнен.");
+
+    // Save rememberEmail preference after successful login.
+    if (typeof persistRememberEmail === "function") persistRememberEmail();
 
     // Load user/token from main state
     const auth = await window.desktopApi.getAuth();
@@ -1084,6 +1538,117 @@ refreshBtn.addEventListener("click", async () => {
     }
   } catch {}
 });
+
+function setSettingsOpen(open) {
+  if (!settingsPanel) return;
+  settingsPanel.classList.toggle("hidden", !open);
+  if (open) document.body.style.overflow = "hidden";
+  else {
+    const otherModalOpen =
+      (createVariantPanel && !createVariantPanel.classList.contains("hidden")) ||
+      (variantDetailPanel && !variantDetailPanel.classList.contains("hidden")) ||
+      (userEditorPanel && !userEditorPanel.classList.contains("hidden"));
+    document.body.style.overflow = otherModalOpen ? "hidden" : "";
+  }
+}
+
+if (openSettingsBtn) {
+  openSettingsBtn.addEventListener("click", () => setSettingsOpen(true));
+}
+if (settingsBackdrop) {
+  settingsBackdrop.addEventListener("click", () => setSettingsOpen(false));
+}
+if (settingsCloseBtn) {
+  settingsCloseBtn.addEventListener("click", () => setSettingsOpen(false));
+}
+
+function setThemeModeAndPersist(nextMode) {
+  applyThemeMode(nextMode);
+  if (!window.desktopApi || !window.desktopApi.setSettings) return;
+  window.desktopApi.setSettings(undefined, { themeMode: nextMode }).catch(() => {
+    toast("Ошибка", "Не удалось сохранить тему.", "danger");
+  });
+}
+
+if (themeModeSystemBtn) themeModeSystemBtn.addEventListener("click", () => setThemeModeAndPersist("system"));
+if (themeModeDarkBtn) themeModeDarkBtn.addEventListener("click", () => setThemeModeAndPersist("dark"));
+if (themeModeLightBtn) themeModeLightBtn.addEventListener("click", () => setThemeModeAndPersist("light"));
+
+function persistAutoRefresh(enabled, intervalSec) {
+  if (!window.desktopApi || !window.desktopApi.setSettings) return;
+  window.desktopApi.setSettings(undefined, {
+    autoRefreshEnabled: enabled,
+    autoRefreshIntervalSec: intervalSec,
+  }).catch(() => {
+    toast("Ошибка", "Не удалось сохранить автообновление.", "danger");
+  });
+}
+
+function onAutoRefreshChanged() {
+  autoRefreshEnabled = !!(autoRefreshEnabledInput && autoRefreshEnabledInput.checked);
+  autoRefreshIntervalSec = Number(autoRefreshIntervalSecSelect ? autoRefreshIntervalSecSelect.value : 60);
+  persistAutoRefresh(autoRefreshEnabled, autoRefreshIntervalSec);
+
+  startAutoRefreshIfNeeded();
+}
+
+if (autoRefreshEnabledInput) autoRefreshEnabledInput.addEventListener("change", onAutoRefreshChanged);
+if (autoRefreshIntervalSecSelect) autoRefreshIntervalSecSelect.addEventListener("change", onAutoRefreshChanged);
+
+function persistUiSetting(patch) {
+  if (!window.desktopApi || !window.desktopApi.setSettings) return;
+  window.desktopApi.setSettings(undefined, patch).catch(() => {});
+}
+
+if (animationsEnabledInput) {
+  animationsEnabledInput.addEventListener("change", () => {
+    animationsEnabled = !!animationsEnabledInput.checked;
+    document.body.classList.toggle("no-animations", !animationsEnabled);
+    persistUiSetting({ animationsEnabled });
+  });
+}
+
+if (loadingOverlayEnabledInput) {
+  loadingOverlayEnabledInput.addEventListener("change", () => {
+    loadingOverlayEnabled = !!loadingOverlayEnabledInput.checked;
+    if (!loadingOverlayEnabled) hideLoading();
+    persistUiSetting({ loadingOverlayEnabled });
+  });
+}
+
+if (autoOpenLastTabInput) {
+  autoOpenLastTabInput.addEventListener("change", () => {
+    autoOpenLastTab = !!autoOpenLastTabInput.checked;
+    persistUiSetting({ autoOpenLastTab });
+  });
+}
+
+if (settingsLogoutBtn) {
+  settingsLogoutBtn.addEventListener("click", async () => {
+    setSettingsOpen(false);
+    showLoading("Выходим из аккаунта...");
+    try {
+      await window.desktopApi.logout();
+    } catch {}
+    try {
+      await window.desktopApi.clearAuth();
+    } catch {}
+    dashboardUser = null;
+    await showLogin();
+    emailInput.focus();
+    hideLoading();
+  });
+}
+
+if (clearSavedEmailBtn) {
+  clearSavedEmailBtn.addEventListener("click", async () => {
+    setSettingsOpen(false);
+    persistUiSetting({ rememberEmail: false, lastEmail: "" });
+    if (rememberEmailCheckbox) rememberEmailCheckbox.checked = false;
+    if (emailInput) emailInput.value = "";
+    toast("Готово", "Email очищен.", "default");
+  });
+}
 
 navListingsBtn.addEventListener("click", async () => {
   setActiveView("listings");
@@ -1148,8 +1713,8 @@ if (resetVariantsFilterBtn) {
   resetVariantsFilterBtn.addEventListener("click", async () => {
     if (variantsIdFilterInput) variantsIdFilterInput.value = "";
     const role = dashboardUser && dashboardUser.role;
-    if (role === "REALTOR") setVariantsMode("mine");
-    else setVariantsMode("all");
+    if (role === "SUPER_ADMIN") setVariantsMode("all");
+    else setVariantsMode("mine");
     await renderVariants();
   });
 }
@@ -1246,6 +1811,9 @@ document.addEventListener("keydown", (e) => {
       if (createVariantForm) createVariantForm.reset();
       setHidden(createVariantError, true);
     }
+    if (userEditorPanel && !userEditorPanel.classList.contains("hidden")) {
+      setUserEditorOpen(false);
+    }
     return;
   }
 
@@ -1334,10 +1902,36 @@ if (createVariantForm) {
 
     setVariantsUiLoading(createVariantBtn, true);
     try {
-      await window.desktopApi.createVariant(payload);
+      const files = variantPhotosInput && variantPhotosInput.files ? Array.from(variantPhotosInput.files) : [];
+      const docFile = variantDocumentInput && variantDocumentInput.files ? variantDocumentInput.files[0] : null;
+
+      if (files.length === 0 && !docFile) {
+        await window.desktopApi.createVariant(payload);
+      } else {
+        // Convert files to base64 for multipart upload via Electron main process.
+        const photos = [];
+        for (const f of files) {
+          const base64 = await fileToBase64(f);
+          if (!base64) continue;
+          photos.push({ base64, filename: f.name || "photo", mime: f.type || "application/octet-stream" });
+        }
+
+        let document = null;
+        if (docFile) {
+          const base64 = await fileToBase64(docFile);
+          if (base64) {
+            document = { base64, filename: docFile.name || "document", mime: docFile.type || "application/octet-stream" };
+          }
+        }
+
+        await window.desktopApi.createPropertyWithFiles(payload, photos, document);
+      }
+
       toast("Готово", "Объект добавлен.");
       setCreatePanelOpen(false);
       createVariantForm.reset();
+      if (variantPhotosInput) variantPhotosInput.value = "";
+      if (variantDocumentInput) variantDocumentInput.value = "";
       await renderVariants();
     } catch (err) {
       if (err && err.status === 401) {

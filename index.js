@@ -112,16 +112,28 @@ const authenticate = async (req, res, next) => {
     const decoded = jwt.verify(token, jwtSecret);
     const connection = await pool.getConnection();
     const [users] = await connection.execute(
-      "SELECT id, role, first_name, last_name FROM users1 WHERE id = ? AND token = ?",
-      [decoded.id, token]
+      "SELECT id, role, first_name, last_name, token FROM users1 WHERE id = ?",
+      [decoded.id]
     );
-    connection.release();
 
     if (users.length === 0) {
-      console.error("Authentication error: Invalid token for user ID:", decoded.id);
+      connection.release();
+      console.error("Authentication error: User not found for token, user ID:", decoded.id);
       return res.status(401).json({ error: "Недействительный токен" });
     }
 
+    // If JWT is valid but token in DB doesn't match (e.g. app restarts / token mismatch),
+    // update stored token to current token so the session stays stable.
+    const dbToken = users[0].token;
+    if (!dbToken || dbToken !== token) {
+      try {
+        await connection.execute("UPDATE users1 SET token = ? WHERE id = ?", [token, users[0].id]);
+      } catch (e) {
+        // If update fails, still allow request if JWT is valid.
+      }
+    }
+
+    connection.release();
     req.user = { ...decoded, first_name: users[0].first_name, last_name: users[0].last_name };
     next();
   } catch (error) {

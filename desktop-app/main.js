@@ -73,15 +73,86 @@ ipcMain.handle("get-settings", async () => {
   await ensureStore();
   return {
     baseUrl: await getBaseUrl(),
+    themeMode: (store.get("themeMode") || "system").toString(),
+    autoRefreshEnabled: !!store.get("autoRefreshEnabled"),
+    autoRefreshIntervalSec: Number(store.get("autoRefreshIntervalSec") ?? 60),
+    rememberEmail: !!store.get("rememberEmail"),
+    lastEmail: (store.get("lastEmail") || "").toString(),
+    animationsEnabled: store.get("animationsEnabled") !== false,
+    loadingOverlayEnabled: store.get("loadingOverlayEnabled") !== false,
+    autoOpenLastTab: store.get("autoOpenLastTab") !== false,
+    lastTab: (store.get("lastTab") || "listings").toString(),
   };
 });
 
-ipcMain.handle("set-settings", async (_event, { baseUrl }) => {
+ipcMain.handle("set-settings", async (_event, { baseUrl, themeMode, autoRefreshEnabled, autoRefreshIntervalSec, rememberEmail, lastEmail, animationsEnabled, loadingOverlayEnabled, autoOpenLastTab, lastTab } = {}) => {
   const s = await ensureStore();
-  if (!baseUrl || typeof baseUrl !== "string") throw new Error("baseUrl is required");
-  const cleaned = baseUrl.toString().trim().replace(/\/$/, "");
-  s.set("baseUrl", cleaned);
-  return { baseUrl: cleaned };
+
+  let cleanedBaseUrl = await getBaseUrl();
+  if (baseUrl !== undefined) {
+    if (!baseUrl || typeof baseUrl !== "string") throw new Error("baseUrl must be a string");
+    cleanedBaseUrl = baseUrl.toString().trim().replace(/\/$/, "");
+    s.set("baseUrl", cleanedBaseUrl);
+  }
+
+  if (themeMode !== undefined) {
+    const allowed = ["system", "dark", "light"];
+    const next = themeMode.toString().trim().toLowerCase();
+    if (!allowed.includes(next)) throw new Error("themeMode must be 'system', 'dark' or 'light'");
+    s.set("themeMode", next);
+  }
+
+  if (typeof autoRefreshEnabled === "boolean") {
+    s.set("autoRefreshEnabled", autoRefreshEnabled);
+  }
+
+  if (autoRefreshIntervalSec !== undefined) {
+    const n = Number(autoRefreshIntervalSec);
+    if (!Number.isFinite(n) || n < 10 || n > 600) throw new Error("autoRefreshIntervalSec must be 10..600");
+    s.set("autoRefreshIntervalSec", n);
+  }
+
+  if (rememberEmail !== undefined) {
+    s.set("rememberEmail", !!rememberEmail);
+  }
+
+  if (lastEmail !== undefined) {
+    const v = String(lastEmail ?? "").trim();
+    // Store only if non-empty; otherwise just clear.
+    s.set("lastEmail", v);
+  }
+
+  if (typeof animationsEnabled === "boolean") {
+    s.set("animationsEnabled", animationsEnabled);
+  }
+
+  if (typeof loadingOverlayEnabled === "boolean") {
+    s.set("loadingOverlayEnabled", loadingOverlayEnabled);
+  }
+
+  if (typeof autoOpenLastTab === "boolean") {
+    s.set("autoOpenLastTab", autoOpenLastTab);
+  }
+
+  if (lastTab !== undefined && lastTab !== null) {
+    const v = String(lastTab).trim();
+    // allowed tabs
+    const allowed = ["listings", "raions", "users", "types"];
+    s.set("lastTab", allowed.includes(v) ? v : "listings");
+  }
+
+  return {
+    baseUrl: cleanedBaseUrl,
+    themeMode: (s.get("themeMode") || "system").toString(),
+    autoRefreshEnabled: !!s.get("autoRefreshEnabled"),
+    autoRefreshIntervalSec: Number(s.get("autoRefreshIntervalSec") ?? 60),
+    rememberEmail: !!s.get("rememberEmail"),
+    lastEmail: (s.get("lastEmail") || "").toString(),
+    animationsEnabled: s.get("animationsEnabled") !== false,
+    loadingOverlayEnabled: s.get("loadingOverlayEnabled") !== false,
+    autoOpenLastTab: s.get("autoOpenLastTab") !== false,
+    lastTab: (s.get("lastTab") || "listings").toString(),
+  };
 });
 
 ipcMain.handle("get-auth", async () => {
@@ -131,7 +202,12 @@ ipcMain.handle("logout", async () => {
   const s = await ensureStore();
   try {
     if (token) {
-      await apiFetch("/api/logout", { method: "POST", token });
+      try {
+        await apiFetch("/api/logout", { method: "POST", token });
+      } catch (err) {
+        // If token is already invalid/expired, still clear local auth.
+        // We don't rethrow to avoid Electron handler errors.
+      }
     }
   } finally {
     s.delete("token");
@@ -364,6 +440,184 @@ ipcMain.handle("create-variant", async (_event, payload = {}) => {
   }
 
   return data;
+});
+
+// Create property with photos/documents (multipart)
+ipcMain.handle("create-property-with-files", async (_event, { payload = {}, photos = [], document = null } = {}) => {
+  const token = await getToken();
+  if (!token) throw new Error("Не авторизован");
+
+  const baseUrl = (await getBaseUrl()).replace(/\/$/, "");
+  const url = `${baseUrl}/api/properties`;
+
+  const form = new FormData();
+
+  // Append simple fields from payload
+  for (const [key, value] of Object.entries(payload || {})) {
+    if (value === undefined || value === null) continue;
+    const v = typeof value === "string" ? value.trim() : value;
+    if (v === "" || v === undefined || v === null) continue;
+    form.append(key, String(v));
+  }
+
+  // Append photos (fieldname must be "photos")
+  const safePhotos = Array.isArray(photos) ? photos : [];
+  for (const p of safePhotos) {
+    if (!p || !p.base64) continue;
+    const mime = p.mime || "application/octet-stream";
+    const filename = p.filename || "photo";
+    const buf = Buffer.from(String(p.base64), "base64");
+    const blob = new Blob([buf], { type: mime });
+    form.append("photos", blob, filename);
+  }
+
+  // Append one document (fieldname must be "document")
+  if (document && document.base64) {
+    const mime = document.mime || "application/octet-stream";
+    const filename = document.filename || "document";
+    const buf = Buffer.from(String(document.base64), "base64");
+    const blob = new Blob([buf], { type: mime });
+    form.append("document", blob, filename);
+  }
+
+  try {
+    return await apiFetchFormData("/api/properties", {
+      method: "POST",
+      token,
+      bodyFormData: form,
+    });
+  } catch (err) {
+    if (err && err.status === 401) {
+      const s = store;
+      if (s) {
+        s.delete("token");
+        s.delete("user");
+      }
+    }
+    throw err;
+  }
+});
+
+async function apiFetchFormData(endpoint, { method = "POST", token, bodyFormData } = {}) {
+  const baseUrl = (await getBaseUrl()).replace(/\/$/, "");
+  const url = endpoint.startsWith("http") ? endpoint : `${baseUrl}${endpoint}`;
+
+  const headers = {
+    Accept: "application/json",
+  };
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const res = await fetch(url, {
+    method,
+    headers,
+    body: bodyFormData,
+  });
+
+  const text = await res.text();
+  let data = null;
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = text;
+    }
+  }
+
+  if (!res.ok) {
+    const message =
+      (data && typeof data === "object" && (data.error || data.message)) ? (data.error || data.message) :
+      (typeof data === "string" && data) ? data :
+      `HTTP ${res.status}`;
+
+    const err = new Error(message);
+    err.status = res.status;
+    err.data = data;
+    throw err;
+  }
+
+  return data;
+}
+
+ipcMain.handle("create-user", async (_event, payload = {}) => {
+  const token = await getToken();
+  if (!token) throw new Error("Не авторизован");
+
+  const { email, name, phone, role, password, photo } = payload || {};
+  if (!email || !name || !phone || !role || !password) {
+    throw new Error("Все поля (email, name, phone, role, password) обязательны");
+  }
+
+  const form = new FormData();
+  form.append("email", String(email));
+  form.append("name", String(name));
+  form.append("phone", String(phone));
+  form.append("role", String(role));
+  form.append("password", String(password));
+
+  if (photo && photo.base64) {
+    const mime = photo.mime || "application/octet-stream";
+    const filename = photo.filename || "photo";
+    const buf = Buffer.from(String(photo.base64), "base64");
+    const blob = new Blob([buf], { type: mime });
+    form.append("photo", blob, filename);
+  }
+
+  try {
+    return await apiFetchFormData("/api/users", { method: "POST", token, bodyFormData: form });
+  } catch (err) {
+    if (err && err.status === 401) {
+      const s = store;
+      if (s) {
+        s.delete("token");
+        s.delete("user");
+      }
+    }
+    throw err;
+  }
+});
+
+ipcMain.handle("update-user", async (_event, { id, payload } = {}) => {
+  const token = await getToken();
+  if (!token) throw new Error("Не авторизован");
+
+  const sid = id !== undefined && id !== null ? String(id).trim() : "";
+  if (!sid) throw new Error("ID пользователя обязателен");
+
+  const { email, name, phone, role, password, photo } = payload || {};
+  if (!email || !name || !phone || !role) {
+    throw new Error("Все поля (email, name, phone, role) обязательны");
+  }
+
+  const form = new FormData();
+  form.append("email", String(email));
+  form.append("name", String(name));
+  form.append("phone", String(phone));
+  form.append("role", String(role));
+
+  if (password && String(password).trim() !== "") {
+    form.append("password", String(password));
+  }
+
+  if (photo && photo.base64) {
+    const mime = photo.mime || "application/octet-stream";
+    const filename = photo.filename || "photo";
+    const buf = Buffer.from(String(photo.base64), "base64");
+    const blob = new Blob([buf], { type: mime });
+    form.append("photo", blob, filename);
+  }
+
+  try {
+    return await apiFetchFormData(`/api/users/${encodeURIComponent(sid)}`, { method: "PUT", token, bodyFormData: form });
+  } catch (err) {
+    if (err && err.status === 401) {
+      const s = store;
+      if (s) {
+        s.delete("token");
+        s.delete("user");
+      }
+    }
+    throw err;
+  }
 });
 
 function createWindow() {

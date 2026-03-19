@@ -2,7 +2,7 @@ const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("desktopApi", {
   getSettings: () => ipcRenderer.invoke("get-settings"),
-  setSettings: (baseUrl) => ipcRenderer.invoke("set-settings", { baseUrl }),
+  setSettings: (baseUrl, ui = {}) => ipcRenderer.invoke("set-settings", { baseUrl, ...ui }),
   pingApi: (baseUrl) => ipcRenderer.invoke("ping-api", { baseUrl }),
   getAuth: () => ipcRenderer.invoke("get-auth"),
   clearAuth: () => ipcRenderer.invoke("clear-auth"),
@@ -19,5 +19,8 @@ contextBridge.exposeInMainWorld("desktopApi", {
   getVariants: (mode, id) => ipcRenderer.invoke("get-variants", { mode, id }),
   getVariantDetail: (id) => ipcRenderer.invoke("get-variant-detail", { id }),
   createVariant: (payload) => ipcRenderer.invoke("create-variant", payload),
+  createPropertyWithFiles: (payload, photos, document) => ipcRenderer.invoke("create-property-with-files", { payload, photos, document }),
+  createUser: (payload) => ipcRenderer.invoke("create-user", payload),
+  updateUser: (id, payload) => ipcRenderer.invoke("update-user", { id, payload }),
 });
 
