@@ -1,0 +1,336 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Kurut Desktop</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div id="loginView" class="view">
+      <div class="bg">
+        <div class="bg-glow g1"></div>
+        <div class="bg-glow g2"></div>
+      </div>
+
+      <div class="auth-wrap">
+        <div class="auth-card">
+          <div class="brand">
+            <div class="logo-mark" aria-hidden="true">K</div>
+            <div class="brand-text">
+              <div class="brand-title">Kurut</div>
+              <div class="brand-subtitle">Админ доступ</div>
+            </div>
+          </div>
+
+          <div class="auth-heading">
+            <h1>Вход</h1>
+            <p>Введите email и пароль, чтобы продолжить.</p>
+          </div>
+
+          <form id="loginForm" class="form" autocomplete="off">
+            <div class="field">
+              <label for="email">Email</label>
+              <input
+                id="email"
+                name="email"
+                type="email"
+                placeholder="you@example.com"
+                required
+              />
+              <div id="emailError" class="field-error hidden" role="alert"></div>
+            </div>
+
+            <div class="field">
+              <div class="label-row">
+                <label for="password">Пароль</label>
+                <button id="showPasswordBtn" class="link-btn" type="button" tabindex="-1">
+                  Показать
+                </button>
+              </div>
+              <input id="password" name="password" type="password" placeholder="••••••••" required />
+              <div id="passwordError" class="field-error hidden" role="alert"></div>
+            </div>
+
+            <div class="form-actions">
+              <button id="loginBtn" class="primary-btn" type="submit">
+                <span class="btn-text">Войти</span>
+                <span id="loginSpinner" class="spinner hidden" aria-hidden="true"></span>
+              </button>
+            </div>
+
+            <div id="loginError" class="alert hidden" role="alert"></div>
+          </form>
+
+          <details class="connection">
+            <summary>Настройки подключения</summary>
+            <div class="field compact">
+              <label for="baseUrl">API Base URL</label>
+              <input id="baseUrl" type="url" placeholder="https://vasya010-kurut01-710e.twc1.net" />
+              <div class="hint">По умолчанию установлен домен вашего бэкенда.</div>
+            </div>
+            <div id="connectionStatus" class="conn-status hidden" aria-live="polite"></div>
+            <div class="connection-actions">
+              <button id="testBaseUrlBtn" class="secondary-btn compact" type="button">Проверить</button>
+              <button id="saveBaseUrlBtn" class="secondary-btn" type="button">Сохранить</button>
+            </div>
+          </details>
+
+          <div class="auth-footer">
+            <span class="dot"></span>
+            <span>Работает для Windows (ПК).</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="dashboardView" class="view hidden">
+      <aside class="sidebar">
+        <div class="sidebar-top">
+          <div class="user">
+            <div id="userAvatar" class="avatar" aria-hidden="true">U</div>
+            <div class="user-meta">
+              <div id="userName" class="user-name">—</div>
+              <div id="userRole" class="user-role">—</div>
+            </div>
+          </div>
+        </div>
+
+        <nav class="nav">
+          <button id="navListings" class="nav-item active" type="button">
+            Объявления
+          </button>
+          <button id="navRaions" class="nav-item" type="button">Районы</button>
+          <button id="navUsers" class="nav-item" type="button">Пользователи</button>
+          <button id="navTypes" class="nav-item" type="button">Варианты</button>
+        </nav>
+
+        <div class="sidebar-bottom">
+          <button id="logoutBtn" class="ghost-btn" type="button">Выйти</button>
+        </div>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <div>
+            <div id="pageTitle" class="page-title">Админ dashboard</div>
+            <div id="pageSubtitle" class="page-subtitle">Список объектов недвижимости</div>
+          </div>
+          <div class="topbar-actions">
+            <button id="refreshBtn" class="secondary-btn compact" type="button">Обновить</button>
+          </div>
+        </header>
+
+        <section class="content">
+          <div id="statsWrap" class="stats">
+            <div class="stat-card">
+              <div class="stat-value" id="statCount">0</div>
+              <div class="stat-label">Записей</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-value" id="statToday">—</div>
+              <div class="stat-label">Сегодня</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-value" id="statPriceAvg">—</div>
+              <div class="stat-label">Средняя цена</div>
+            </div>
+          </div>
+
+          <div id="viewListings" class="view-panel">
+            <div class="panel">
+              <div class="panel-header">
+                <div class="panel-title">Объявления</div>
+                <div class="panel-subtitle">Статусы и базовые данные</div>
+              </div>
+
+              <div class="table-wrap">
+                <table class="table">
+                  <thead>
+                    <tr>
+                      <th>ID</th>
+                      <th>Дата</th>
+                      <th>Время</th>
+                      <th>Адрес</th>
+                      <th>Площадь</th>
+                      <th>Цена</th>
+                      <th>Статус</th>
+                    </tr>
+                  </thead>
+                  <tbody id="listingsTbody"></tbody>
+                </table>
+              </div>
+
+              <div id="listingsEmpty" class="empty hidden">
+                Пока нет данных. Нажмите «Обновить».
+              </div>
+
+              <div id="listingsError" class="alert hidden" role="alert"></div>
+            </div>
+          </div>
+
+          <div id="viewRaions" class="view-panel hidden">
+            <div class="panel">
+              <div class="panel-header">
+                <div class="panel-title">Районы</div>
+                <div class="panel-subtitle">Районы и микрорайоны</div>
+              </div>
+
+              <div class="table-wrap">
+                <table class="table">
+                  <thead>
+                    <tr>
+                      <th>ID</th>
+                      <th>Название</th>
+                      <th>Тип</th>
+                      <th>Родитель</th>
+                    </tr>
+                  </thead>
+                  <tbody id="raionsTbody"></tbody>
+                </table>
+              </div>
+
+              <div id="raionsEmpty" class="empty hidden">Нет данных.</div>
+              <div id="raionsError" class="alert hidden" role="alert"></div>
+            </div>
+          </div>
+
+          <div id="viewUsers" class="view-panel hidden">
+            <div class="panel">
+              <div class="panel-header">
+                <div class="panel-title">Пользователи</div>
+                <div class="panel-subtitle">Роли и базовые контакты</div>
+              </div>
+
+              <div class="table-wrap">
+                <table class="table">
+                  <thead>
+                    <tr>
+                      <th>ID</th>
+                      <th>ФИО</th>
+                      <th>Email</th>
+                      <th>Телефон</th>
+                      <th>Роль</th>
+                    </tr>
+                  </thead>
+                  <tbody id="usersTbody"></tbody>
+                </table>
+              </div>
+
+              <div id="usersEmpty" class="empty hidden">Нет данных.</div>
+              <div id="usersError" class="alert hidden" role="alert"></div>
+            </div>
+          </div>
+
+          <div id="viewTypes" class="view-panel hidden">
+            <div class="panel">
+              <div class="panel-header">
+                <div class="panel-title">Варианты</div>
+                <div class="panel-subtitle">Мои и все варианты с фильтром по ID</div>
+              </div>
+
+              <div class="variants-toolbar">
+                <div class="segmented" role="tablist" aria-label="Режим">
+                  <button id="variantsModeAll" class="seg-btn active" type="button">Все</button>
+                  <button id="variantsModeMine" class="seg-btn" type="button">Мои</button>
+                </div>
+
+                <div class="filter-inline">
+                  <label for="variantsIdFilter">ID</label>
+                  <input id="variantsIdFilter" type="text" placeholder="Например: 15" />
+                </div>
+
+                <div class="filter-actions">
+                  <button id="applyVariantsFilterBtn" class="secondary-btn compact" type="button">Применить</button>
+                  <button id="resetVariantsFilterBtn" class="secondary-btn compact" type="button">Сбросить все</button>
+                  <button id="toggleCreateVariantBtn" class="secondary-btn" type="button">Добавить вариант</button>
+                </div>
+              </div>
+
+              <div id="createVariantPanel" class="create hidden">
+                <div class="panel-header tight">
+                  <div class="panel-title">Создать вариант</div>
+                  <div class="panel-subtitle">Заполните обязательные поля</div>
+                </div>
+
+                <form id="createVariantForm" class="create-form" autocomplete="off">
+                  <div class="form-grid">
+                    <div class="field">
+                      <label for="variantType">Тип</label>
+                      <select id="variantType" required>
+                        <option value="">Выберите тип</option>
+                      </select>
+                    </div>
+
+                    <div class="field">
+                      <label for="variantPrice">Цена</label>
+                      <input id="variantPrice" type="number" min="0" step="0.01" placeholder="Например: 120000" required />
+                    </div>
+
+                    <div class="field">
+                      <label for="variantRukPrice">Рук. цена</label>
+                      <input id="variantRukPrice" type="number" min="0" step="0.01" placeholder="Например: 110000" required />
+                    </div>
+
+                    <div class="field">
+                      <label for="variantMkv">Площадь (m2)</label>
+                      <input id="variantMkv" type="number" min="0" step="0.01" placeholder="Например: 55.5" required />
+                    </div>
+
+                    <div class="field">
+                      <label for="variantAddress">Адрес</label>
+                      <input id="variantAddress" type="text" placeholder="Улица, дом..." required />
+                    </div>
+
+                    <div class="field">
+                      <label for="variantEtaj">Этаж</label>
+                      <input id="variantEtaj" type="number" min="0" step="1" placeholder="Например: 5" required />
+                    </div>
+
+                    <div class="field">
+                      <label for="variantEtajnost">Этажность</label>
+                      <input id="variantEtajnost" type="number" min="0" step="1" placeholder="Например: 9" required />
+                    </div>
+                  </div>
+
+                  <div id="createVariantError" class="alert hidden" role="alert"></div>
+
+                  <div class="create-actions">
+                    <button id="createVariantBtn" class="primary-btn" type="submit">Создать</button>
+                    <button id="cancelCreateVariantBtn" class="ghost-btn" type="button">Отмена</button>
+                  </div>
+                </form>
+              </div>
+
+              <div class="table-wrap">
+                <table class="table">
+                  <thead>
+                    <tr>
+                      <th>ID</th>
+                      <th>Дата</th>
+                      <th>Время</th>
+                      <th>Адрес</th>
+                      <th>Площадь</th>
+                      <th>Цена</th>
+                      <th>Статус</th>
+                    </tr>
+                  </thead>
+                  <tbody id="variantsTbody"></tbody>
+                </table>
+              </div>
+
+              <div id="variantsEmpty" class="empty hidden">Нет данных. Нажмите «Применить» или «Добавить вариант».</div>
+              <div id="variantsError" class="alert hidden" role="alert"></div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <div id="toastHost" class="toast-host" aria-live="polite" aria-atomic="true"></div>
+
+    <script defer src="./app.js"></script>
+  </body>
+</html>
+

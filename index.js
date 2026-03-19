@@ -1728,7 +1728,77 @@ app.get("/api/listings", authenticate, async (req, res) => {
 
 
 
-app.get("/public/properties/:id", async (req, res) => {
+// Get Variants (Properties) with optional filtering for "all" or "mine"
+// mode=all: return all properties
+// mode=mine: for SUPER_ADMIN -> all, for REALTOR -> where curator_id = req.user.id
+// Optional: id query param to filter by property id
+app.get("/api/variants", authenticate, async (req, res) => {
+  const { mode = "all", id } = req.query;
+
+  if (!mode || !["all", "mine"].includes(mode)) {
+    return res.status(400).json({ error: "mode должен быть 'all' или 'mine'" });
+  }
+
+  let propertyId = null;
+  if (id !== undefined && id !== null && String(id).trim() !== "") {
+    if (isNaN(parseInt(id))) {
+      return res.status(400).json({ error: "id должен быть числом" });
+    }
+    propertyId = parseInt(id);
+  }
+
+  let connection;
+  try {
+    connection = await pool.getConnection();
+
+    const whereParts = ["1=1"];
+    const params = [];
+
+    if (propertyId !== null) {
+      whereParts.push("p.id = ?");
+      params.push(propertyId);
+    }
+
+    if (mode === "mine") {
+      if (req.user.role === "SUPER_ADMIN") {
+        // no extra where
+      } else if (req.user.role === "REALTOR") {
+        whereParts.push("p.curator_id = ?");
+        params.push(req.user.id);
+      } else {
+        return res.status(403).json({ error: "Доступ запрещён" });
+      }
+    }
+
+    const whereSql = whereParts.join(" AND ");
+    const [rows] = await connection.execute(
+      `SELECT p.id, p.price, p.mkv, p.status, p.address, p.created_at
+       FROM properties p
+       WHERE ${whereSql}
+       ORDER BY p.created_at DESC`,
+      params
+    );
+
+    const variants = rows.map((row) => ({
+      id: row.id,
+      date: new Date(row.created_at).toLocaleDateString("ru-RU"),
+      time: new Date(row.created_at).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }),
+      area: row.mkv,
+      district: row.address,
+      price: row.price,
+      status: row.status,
+    }));
+
+    res.json(variants);
+  } catch (error) {
+    console.error("Error retrieving variants:", { message: error.message, stack: error.stack });
+    res.status(500).json({ error: `Внутренняя ошибка сервера: ${error.message}` });
+  } finally {
+    if (connection) connection.release();
+  }
+});
+
+app.get("/public/properties/:id(\\d+)", async (req, res) => {
   const { id } = req.params;
 
   if (!id || isNaN(parseInt(id))) {
