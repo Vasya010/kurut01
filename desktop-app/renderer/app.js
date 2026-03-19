@@ -72,6 +72,22 @@ const variantEtajnostInput = $("variantEtajnost");
 
 const toastHost = $("toastHost");
 
+const loadingOverlay = $("loadingOverlay");
+const loadingSubtitle = $("loadingSubtitle");
+
+function showLoading(message) {
+  if (!loadingOverlay) return;
+  loadingOverlay.classList.remove("hidden");
+  if (loadingSubtitle) {
+    loadingSubtitle.textContent = message || "Загрузка...";
+  }
+}
+
+function hideLoading() {
+  if (!loadingOverlay) return;
+  loadingOverlay.classList.add("hidden");
+}
+
 const navListingsBtn = $("navListings");
 const navRaionsBtn = $("navRaions");
 const navUsersBtn = $("navUsers");
@@ -479,22 +495,28 @@ async function showLogin(message) {
 }
 
 async function bootstrap() {
+  showLoading("Запуск приложения...");
   await loadSettings();
 
   const auth = await window.desktopApi.getAuth();
   if (auth && auth.token) {
     try {
+      showLoading("Проверяем сессию...");
       await showDashboard(auth);
+      hideLoading();
       return;
     } catch (e) {
       // fallthrough to login
     }
 
     try {
+      showLoading("Сбрасываем устаревшую сессию...");
       await window.desktopApi.clearAuth();
     } catch {}
+    hideLoading();
     await showLogin("Сессия устарела. Выполните вход снова.");
   } else {
+    hideLoading();
     await showLogin();
   }
 }
@@ -638,6 +660,7 @@ loginForm.addEventListener("submit", async (e) => {
 });
 
 logoutBtn.addEventListener("click", async () => {
+  showLoading("Выходим из аккаунта...");
   setHidden(listingsError, true);
   try {
     await window.desktopApi.logout();
@@ -649,6 +672,7 @@ logoutBtn.addEventListener("click", async () => {
   } catch {}
   await showLogin();
   emailInput.focus();
+  hideLoading();
 });
 
 refreshBtn.addEventListener("click", async () => {
@@ -806,5 +830,6 @@ if (createVariantForm) {
 bootstrap().catch((err) => {
   // If something fails early, show login.
   showLogin((err && err.message) ? err.message : "Ошибка запуска");
+  hideLoading();
 });
 

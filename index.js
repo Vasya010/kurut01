@@ -1798,6 +1798,153 @@ app.get("/api/variants", authenticate, async (req, res) => {
   }
 });
 
+// Create Variant (Properties without files) - JSON only (no multer)
+app.post("/api/variants", authenticate, async (req, res) => {
+  if (!["SUPER_ADMIN", "REALTOR"].includes(req.user.role)) {
+    return res.status(403).json({ error: "Доступ запрещён: требуется роль SUPER_ADMIN или REALTOR" });
+  }
+
+  const {
+    type_id,
+    repair,
+    series,
+    zhk_id,
+    owner_name,
+    owner_phone,
+    curator_id,
+    price,
+    unit,
+    rukprice,
+    mkv,
+    rooms,
+    phone,
+    district_id,
+    subdistrict_id,
+    address,
+    notes,
+    description,
+    status,
+    owner_id,
+    etaj,
+    etajnost,
+  } = req.body || {};
+
+  if (!type_id || !price || !rukprice || !mkv || !address || etaj === undefined || etaj === null || etajnost === undefined || etajnost === null) {
+    return res.status(400).json({ error: "Все обязательные поля (type_id, price, rukprice, mkv, address, etaj, etajnost) должны быть заполнены" });
+  }
+
+  const pPrice = Number(String(price).replace(",", "."));
+  const pRukPrice = Number(String(rukprice).replace(",", "."));
+  const pMkv = Number(String(mkv).replace(",", "."));
+  const pEtaj = Number.parseInt(String(etaj), 10);
+  const pEtajnost = Number.parseInt(String(etajnost), 10);
+
+  if (!Number.isFinite(pPrice) || !Number.isFinite(pRukPrice) || !Number.isFinite(pMkv) || !Number.isFinite(pEtaj) || !Number.isFinite(pEtajnost)) {
+    return res.status(400).json({ error: "Проверьте числовые поля (price, rukprice, mkv, etaj, etajnost)" });
+  }
+
+  let finalCuratorId = null;
+  if (curator_id !== undefined && curator_id !== null && String(curator_id).trim() !== "") {
+    const parsedCuratorId = Number.parseInt(String(curator_id), 10);
+    if (!Number.isFinite(parsedCuratorId)) return res.status(400).json({ error: "curator_id должен быть числом" });
+    finalCuratorId = parsedCuratorId;
+    if (req.user.role === "REALTOR" && finalCuratorId !== req.user.id) {
+      return res.status(403).json({ error: "Риелтор может назначить только себя куратором" });
+    }
+  } else {
+    finalCuratorId = req.user.role === "REALTOR" ? req.user.id : null;
+  }
+
+  let connection;
+  try {
+    connection = await pool.getConnection();
+
+    // Optional FK checks if provided
+    if (zhk_id) {
+      const [jkCheck] = await connection.execute("SELECT id FROM jk WHERE id = ?", [zhk_id]);
+      if (jkCheck.length === 0) return res.status(400).json({ error: "Недействительный ID ЖК" });
+    }
+    if (district_id) {
+      const [districtCheck] = await connection.execute("SELECT id FROM districts WHERE id = ?", [district_id]);
+      if (districtCheck.length === 0) return res.status(400).json({ error: "Недействительный ID района" });
+    }
+    if (subdistrict_id) {
+      const [subdistrictCheck] = await connection.execute(
+        "SELECT id FROM subdistricts WHERE id = ? AND district_id = ?",
+        [subdistrict_id, district_id || null]
+      );
+      if (subdistrictCheck.length === 0) return res.status(400).json({ error: "Недействительный ID микрорайона или микрорайон не принадлежит указанному району" });
+    }
+
+    let curatorName = null;
+    if (finalCuratorId) {
+      const [curatorCheck] = await connection.execute(
+        "SELECT id, CONCAT(first_name, ' ', last_name) AS curator_name FROM users1 WHERE id = ?",
+        [finalCuratorId]
+      );
+      if (curatorCheck.length === 0) return res.status(400).json({ error: "Недействительный ID куратора" });
+      curatorName = curatorCheck[0].curator_name;
+    }
+
+    const photosJson = null; // no files in this endpoint
+
+    const [result] = await connection.execute(
+      `INSERT INTO properties (
+        type_id, repair, series, zhk_id, document_id, owner_name, owner_phone, curator_id, price, unit, rukprice, mkv,
+        rooms, phone, district_id, subdistrict_id, address, notes, description, photos, document, status, owner_id, etaj, etajnost
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        type_id || null,
+        repair || null,
+        series || null,
+        zhk_id || null,
+        0,
+        owner_name || null,
+        owner_phone || null,
+        finalCuratorId,
+        pPrice,
+        unit || null,
+        pRukPrice,
+        pMkv,
+        rooms || null,
+        phone || null,
+        district_id || null,
+        subdistrict_id || null,
+        address,
+        notes || null,
+        description || null,
+        photosJson,
+        null,
+        status || null,
+        owner_id || null,
+        pEtaj,
+        pEtajnost,
+      ]
+    );
+
+    const newId = result.insertId;
+
+    res.json({
+      id: newId,
+      date: new Date().toLocaleDateString("ru-RU"),
+      time: new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }),
+      area: pMkv,
+      district: address,
+      price: pPrice,
+      status: status || null,
+      curator_name: curatorName || null,
+    });
+  } catch (error) {
+    console.error("Error creating variant:", {
+      message: error.message,
+      stack: error.stack,
+    });
+    res.status(500).json({ error: `Внутренняя ошибка сервера: ${error.message}` });
+  } finally {
+    if (connection) connection.release();
+  }
+});
+
 app.get("/public/properties/:id(\\d+)", async (req, res) => {
   const { id } = req.params;
 

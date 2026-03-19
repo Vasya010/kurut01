@@ -8,6 +8,25 @@
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
+    <div id="loadingOverlay" class="loading-overlay hidden" aria-live="polite" aria-atomic="true">
+      <div class="loading-card">
+        <div class="loading-top">
+          <div class="loading-logo" aria-hidden="true">K</div>
+          <div>
+            <div class="loading-title">Kurut Desktop</div>
+            <div class="loading-subtitle" id="loadingSubtitle">Подключаемся к серверу...</div>
+          </div>
+        </div>
+        <div class="loading-progress" aria-hidden="true">
+          <div class="loading-bar"></div>
+        </div>
+        <div class="loading-footer">
+          <span class="loading-dot" aria-hidden="true"></span>
+          <span>Разработчик: Василий К</span>
+        </div>
+      </div>
+    </div>
+
     <div id="loginView" class="view">
       <div class="bg">
         <div class="bg-glow g1"></div>
@@ -27,6 +46,14 @@
           <div class="auth-heading">
             <h1>Вход</h1>
             <p>Введите email и пароль, чтобы продолжить.</p>
+          </div>
+
+          <div class="auth-meta">
+            <span class="chip">Админ-панель</span>
+            <span class="chip chip-dev">
+              <span class="chip-dot" aria-hidden="true"></span>
+              Разработчик: Василий К
+            </span>
           </div>
 
           <form id="loginForm" class="form" autocomplete="off">

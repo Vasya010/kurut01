@@ -223,25 +223,27 @@ ipcMain.handle("create-variant", async (_event, payload = {}) => {
   if (!token) throw new Error("Не авторизован");
 
   const baseUrl = (await getBaseUrl()).replace(/\/$/, "");
-  const url = `${baseUrl}/api/properties`;
+  const url = `${baseUrl}/api/variants`;
 
-  const form = new FormData();
+  // JSON endpoint (no multer) to avoid "Unexpected field" errors on uploads.
+  const body = {};
   for (const [key, value] of Object.entries(payload || {})) {
     if (value === undefined || value === null) continue;
-    const str = typeof value === "string" ? value.trim() : String(value);
-    if (!str) continue;
-    form.append(key, str);
+    const v = (typeof value === "string") ? value.trim() : value;
+    if (v === "") continue;
+    body[key] = v;
   }
 
   const headers = {
     Accept: "application/json",
+    "Content-Type": "application/json",
     Authorization: `Bearer ${token}`,
   };
 
   const res = await fetch(url, {
     method: "POST",
     headers,
-    body: form,
+    body: JSON.stringify(body),
   });
 
   const text = await res.text();
