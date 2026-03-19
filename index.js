@@ -1797,7 +1797,7 @@ app.get("/api/variants", authenticate, async (req, res) => {
       whereParts.push("p.curator_id = ?");
       params.push(req.user.id);
     } else if (mode === "mine") {
-      if (req.user.role !== "SUPER_ADMIN") {
+      if (!["SUPER_ADMIN", "ADMIN"].includes(req.user.role)) {
         return res.status(403).json({ error: "Доступ запрещён" });
       }
     }
@@ -1832,7 +1832,7 @@ app.get("/api/variants", authenticate, async (req, res) => {
 
 // Один вариант с фото и полями (REALTOR — только свой объект)
 app.get("/api/variants/:id", authenticate, async (req, res) => {
-  if (!["SUPER_ADMIN", "REALTOR"].includes(req.user.role)) {
+  if (!["SUPER_ADMIN", "REALTOR", "ADMIN"].includes(req.user.role)) {
     return res.status(403).json({ error: "Доступ запрещён" });
   }
 
@@ -1857,7 +1857,10 @@ app.get("/api/variants/:id", authenticate, async (req, res) => {
     }
 
     const row = rows[0];
-    if (req.user.role === "REALTOR" && Number(row.curator_id) !== Number(req.user.id)) {
+    if (
+      req.user.role === "REALTOR" &&
+      Number(row.curator_id) !== Number(req.user.id)
+    ) {
       return res.status(403).json({ error: "Нет доступа к этому объекту" });
     }
 

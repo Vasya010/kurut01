@@ -681,6 +681,131 @@ async function renderVariants() {
   }
 }
 
+function renderVariantDetailInfo(data) {
+  if (!variantDetailInfo) return;
+  variantDetailInfo.innerHTML = "";
+  for (const key of VARIANT_DETAIL_ORDER) {
+    if (!Object.prototype.hasOwnProperty.call(data, key)) continue;
+    const label = VARIANT_DETAIL_LABELS[key] || key;
+    const val = data[key];
+    if (val === null || val === undefined || val === "") continue;
+    const wrap = document.createElement("div");
+    wrap.className = "variant-detail-item";
+    const dt = document.createElement("dt");
+    dt.textContent = label;
+    const dd = document.createElement("dd");
+    const text =
+      typeof val === "object" && val !== null ? JSON.stringify(val) : String(val);
+    dd.textContent = text;
+    if (text.includes("\n")) dd.style.whiteSpace = "pre-wrap";
+    wrap.appendChild(dt);
+    wrap.appendChild(dd);
+    variantDetailInfo.appendChild(wrap);
+  }
+}
+
+function renderVariantSlider() {
+  const n = variantDetailPhotos.length;
+  if (!variantDetailImg || !variantDetailNoPhotos) return;
+
+  if (n === 0) {
+    variantDetailImg.classList.add("hidden");
+    variantDetailNoPhotos.classList.remove("hidden");
+    if (variantDetailPrev) variantDetailPrev.disabled = true;
+    if (variantDetailNext) variantDetailNext.disabled = true;
+    if (variantDetailCounter) variantDetailCounter.textContent = "";
+    if (variantDetailThumbs) variantDetailThumbs.innerHTML = "";
+    return;
+  }
+
+  variantDetailImg.classList.remove("hidden");
+  variantDetailNoPhotos.classList.add("hidden");
+  variantDetailImg.src = variantDetailPhotos[variantDetailSlideIndex];
+  if (variantDetailCounter) {
+    variantDetailCounter.textContent = `${variantDetailSlideIndex + 1} / ${n}`;
+  }
+  if (variantDetailPrev) variantDetailPrev.disabled = variantDetailSlideIndex <= 0;
+  if (variantDetailNext) variantDetailNext.disabled = variantDetailSlideIndex >= n - 1;
+
+  if (variantDetailThumbs) {
+    variantDetailThumbs.innerHTML = "";
+    variantDetailPhotos.forEach((url, i) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = `variant-thumb${i === variantDetailSlideIndex ? " active" : ""}`;
+      const im = document.createElement("img");
+      im.src = url;
+      im.alt = "";
+      b.appendChild(im);
+      b.addEventListener("click", () => {
+        variantDetailSlideIndex = i;
+        renderVariantSlider();
+      });
+      variantDetailThumbs.appendChild(b);
+    });
+  }
+}
+
+function closeVariantDetailPanel() {
+  if (!variantDetailPanel) return;
+  variantDetailPanel.classList.add("hidden");
+  variantDetailPhotos = [];
+  const createOpen = createVariantPanel && !createVariantPanel.classList.contains("hidden");
+  if (!createOpen) document.body.style.overflow = "";
+  setHidden(variantDetailError, true);
+  setHidden(variantDetailLoading, true);
+  setHidden(variantDetailContent, true);
+}
+
+async function openVariantDetailPanel(id) {
+  if (!variantDetailPanel) return;
+  setHidden(variantDetailError, true);
+  setHidden(variantDetailContent, true);
+  setHidden(variantDetailLoading, false);
+  variantDetailPanel.classList.remove("hidden");
+  document.body.style.overflow = "hidden";
+
+  try {
+    const data = await window.desktopApi.getVariantDetail(id);
+    setHidden(variantDetailLoading, true);
+    setHidden(variantDetailContent, false);
+
+    variantDetailPhotos = Array.isArray(data.photos) ? data.photos.filter(Boolean) : [];
+    variantDetailSlideIndex = 0;
+
+    if (variantDetailTitle) variantDetailTitle.textContent = `Объект №${data.id}`;
+    if (variantDetailSubtitle) {
+      const parts = [data.type_id, data.address].filter(Boolean);
+      variantDetailSubtitle.textContent = parts.length ? parts.map((p) => String(p)).join(" · ") : "Карточка объекта";
+    }
+
+    renderVariantSlider();
+    renderVariantDetailInfo(data);
+
+    if (data.document && variantDetailDocLink && variantDetailDocRow) {
+      variantDetailDocLink.href = data.document;
+      variantDetailDocRow.classList.remove("hidden");
+    } else if (variantDetailDocRow) {
+      variantDetailDocRow.classList.add("hidden");
+    }
+  } catch (err) {
+    setHidden(variantDetailLoading, true);
+    setHidden(variantDetailContent, true);
+    if (err && err.status === 401) {
+      closeVariantDetailPanel();
+      toast("Сессия устарела", "Войдите снова.", "danger");
+      await showLogin("Сессия устарела. Выполните вход снова.");
+      return;
+    }
+    const msg = (err && err.message) ? err.message : "Ошибка загрузки карточки";
+    if (variantDetailError) {
+      variantDetailError.textContent = msg;
+      setHidden(variantDetailError, false);
+    }
+    toast("Ошибка", msg, "danger");
+  }
+}
+
 function setActiveNav(tab) {
   const map = {
     listings: navListingsBtn,
@@ -751,6 +876,9 @@ async function showDashboard(auth) {
 }
 
 async function showLogin(message) {
+  dashboardUser = null;
+  closeVariantDetailPanel();
+
   setHidden(dashboardView, true);
   setHidden(loginView, false);
 
@@ -950,7 +1078,10 @@ refreshBtn.addEventListener("click", async () => {
     if (activeTab === "listings") await renderListings();
     if (activeTab === "raions") await renderRaions();
     if (activeTab === "users") await renderUsers();
-    if (activeTab === "types") await renderVariants();
+    if (activeTab === "types") {
+      applyVariantsToolbarForRole();
+      await renderVariants();
+    }
   } catch {}
 });
 
@@ -971,6 +1102,7 @@ navUsersBtn.addEventListener("click", async () => {
 
 navTypesBtn.addEventListener("click", async () => {
   setActiveView("types");
+  applyVariantsToolbarForRole();
   await renderVariants();
 });
 
@@ -1015,7 +1147,9 @@ if (applyVariantsFilterBtn) {
 if (resetVariantsFilterBtn) {
   resetVariantsFilterBtn.addEventListener("click", async () => {
     if (variantsIdFilterInput) variantsIdFilterInput.value = "";
-    setVariantsMode("all");
+    const role = dashboardUser && dashboardUser.role;
+    if (role === "REALTOR") setVariantsMode("mine");
+    else setVariantsMode("all");
     await renderVariants();
   });
 }
@@ -1078,14 +1212,52 @@ if (createVariantBackdrop) {
   });
 }
 
+if (variantDetailBackdrop) {
+  variantDetailBackdrop.addEventListener("click", () => closeVariantDetailPanel());
+}
+if (variantDetailCloseBtn) {
+  variantDetailCloseBtn.addEventListener("click", () => closeVariantDetailPanel());
+}
+if (variantDetailPrev) {
+  variantDetailPrev.addEventListener("click", () => {
+    if (variantDetailSlideIndex > 0) {
+      variantDetailSlideIndex -= 1;
+      renderVariantSlider();
+    }
+  });
+}
+if (variantDetailNext) {
+  variantDetailNext.addEventListener("click", () => {
+    if (variantDetailSlideIndex < variantDetailPhotos.length - 1) {
+      variantDetailSlideIndex += 1;
+      renderVariantSlider();
+    }
+  });
+}
+
 document.addEventListener("keydown", (e) => {
-  if (e.key !== "Escape") return;
-  if (!createVariantPanel) return;
-  const isOpen = !createVariantPanel.classList.contains("hidden");
-  if (!isOpen) return;
-  setCreatePanelOpen(false);
-  if (createVariantForm) createVariantForm.reset();
-  setHidden(createVariantError, true);
+  if (e.key === "Escape") {
+    if (variantDetailPanel && !variantDetailPanel.classList.contains("hidden")) {
+      closeVariantDetailPanel();
+      return;
+    }
+    if (createVariantPanel && !createVariantPanel.classList.contains("hidden")) {
+      setCreatePanelOpen(false);
+      if (createVariantForm) createVariantForm.reset();
+      setHidden(createVariantError, true);
+    }
+    return;
+  }
+
+  if (variantDetailPanel && !variantDetailPanel.classList.contains("hidden") && variantDetailPhotos.length > 1) {
+    if (e.key === "ArrowLeft") {
+      variantDetailSlideIndex = Math.max(0, variantDetailSlideIndex - 1);
+      renderVariantSlider();
+    } else if (e.key === "ArrowRight") {
+      variantDetailSlideIndex = Math.min(variantDetailPhotos.length - 1, variantDetailSlideIndex + 1);
+      renderVariantSlider();
+    }
+  }
 });
 
 const createVariantBtn = $("createVariantBtn");
