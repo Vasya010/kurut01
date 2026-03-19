@@ -878,13 +878,61 @@ tbody tr:hover td{
   padding:16px;
   overflow:auto;
 }
+.modal-form textarea{
+  width:100%;
+  min-height:72px;
+  resize:vertical;
+  border-radius:14px;
+  border:1px solid rgba(255,255,255,.12);
+  background:rgba(0,0,0,.22);
+  color:var(--text);
+  padding:10px 12px;
+  font:inherit;
+}
+.modal-form textarea:focus{
+  outline:none;
+  border-color:rgba(109,94,252,.55);
+  box-shadow:0 0 0 3px rgba(109,94,252,.18);
+}
 .modal-grid{
   display:grid;
   grid-template-columns: repeat(3, minmax(220px, 1fr));
   gap:12px;
 }
+.modal-grid-variants{
+  grid-template-columns: repeat(2, minmax(240px, 1fr));
+}
 .modal-grid .span-2{
   grid-column: span 2;
+}
+.modal-grid-variants .span-2{
+  grid-column: 1 / -1;
+}
+.req{
+  color:#f87171;
+  font-weight:800;
+}
+.hint-box{
+  min-height:42px;
+  display:flex;
+  align-items:center;
+  padding:0 12px;
+  border-radius:14px;
+  border:1px dashed rgba(255,255,255,.16);
+  background:rgba(0,0,0,.14);
+  color:var(--muted);
+  font-weight:700;
+}
+.field-hint{
+  margin-top:6px;
+  font-size:12px;
+  color:var(--muted);
+}
+.apartment-inner{
+  margin-top:8px;
+}
+.apartment-extra.hidden{
+  display:none !important;
 }
 .modal-actions{
   margin-top:14px;

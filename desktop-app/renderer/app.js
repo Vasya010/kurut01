@@ -71,6 +71,21 @@ const variantMkvInput = $("variantMkv");
 const variantAddressInput = $("variantAddress");
 const variantEtajInput = $("variantEtaj");
 const variantEtajnostInput = $("variantEtajnost");
+const variantDistrictSelect = $("variantDistrict");
+const variantSubdistrictSelect = $("variantSubdistrict");
+const variantJkSelect = $("variantJk");
+const variantCuratorSelect = $("variantCurator");
+const variantOwnerNameInput = $("variantOwnerName");
+const variantOwnerPhoneInput = $("variantOwnerPhone");
+const variantPhoneInput = $("variantPhone");
+const variantStatusInput = $("variantStatus");
+const variantDescriptionInput = $("variantDescription");
+const variantNotesInput = $("variantNotes");
+const variantApartmentFields = $("variantApartmentFields");
+const variantRepairInput = $("variantRepair");
+const variantSeriesInput = $("variantSeries");
+const variantRoomsInput = $("variantRooms");
+const variantPricePerMkvHint = $("variantPricePerMkvHint");
 
 const toastHost = $("toastHost");
 
@@ -374,6 +389,147 @@ async function loadVariantTypesSelect() {
   }
 
   variantTypesLoaded = true;
+}
+
+function updatePricePerMkvHint() {
+  if (!variantPricePerMkvHint) return;
+  const price = variantPriceInput ? Number(variantPriceInput.value) : NaN;
+  const mkv = variantMkvInput ? Number(variantMkvInput.value) : NaN;
+  if (!Number.isFinite(price) || !Number.isFinite(mkv) || mkv <= 0) {
+    variantPricePerMkvHint.textContent = "—";
+    return;
+  }
+  variantPricePerMkvHint.textContent = `${(price / mkv).toFixed(2)} сом/м²`;
+}
+
+function setSelectOptions(select, items, placeholder, valueKey, labelKey, formatLabel) {
+  if (!select) return;
+  select.innerHTML = "";
+  const ph = document.createElement("option");
+  ph.value = "";
+  ph.textContent = placeholder;
+  select.appendChild(ph);
+  for (const row of items) {
+    const o = document.createElement("option");
+    o.value = String(row[valueKey]);
+    o.textContent = formatLabel ? formatLabel(row) : String(row[labelKey] ?? row[valueKey]);
+    select.appendChild(o);
+  }
+}
+
+function updateApartmentFieldsVisibility() {
+  if (!variantApartmentFields || !variantTypeSelect) return;
+  const t = (variantTypeSelect.value || "").toLowerCase();
+  const show = t.includes("квартир");
+  variantApartmentFields.classList.toggle("hidden", !show);
+}
+
+async function loadSubdistrictsForDistrict(districtId) {
+  if (!variantSubdistrictSelect) return;
+  const id = districtId ? String(districtId).trim() : "";
+  if (!id) {
+    variantSubdistrictSelect.innerHTML = `<option value="">Сначала выберите район</option>`;
+    variantSubdistrictSelect.disabled = true;
+    return;
+  }
+  variantSubdistrictSelect.disabled = false;
+  variantSubdistrictSelect.innerHTML = `<option value="">Загрузка…</option>`;
+  try {
+    const rows = await window.desktopApi.getSubdistricts(id);
+    const safe = Array.isArray(rows) ? rows : [];
+    setSelectOptions(variantSubdistrictSelect, safe, "Выберите микрорайон", "id", "name");
+  } catch (err) {
+    variantSubdistrictSelect.innerHTML = `<option value="">Ошибка загрузки</option>`;
+    if (err && err.status === 401) {
+      toast("Сессия устарела", "Войдите снова.", "danger");
+      await showLogin("Сессия устарела. Выполните вход снова.");
+    }
+    throw err;
+  }
+}
+
+async function loadCreateVariantReference() {
+  setHidden(createVariantError, true);
+  await loadVariantTypesSelect();
+
+  const auth = await window.desktopApi.getAuth();
+  const role = auth && auth.user ? auth.user.role : "";
+  const myId = auth && auth.user ? auth.user.id : null;
+  const myName =
+    auth && auth.user
+      ? (auth.user.name || `${auth.user.first_name || ""} ${auth.user.last_name || ""}`.trim() || auth.user.email || String(myId))
+      : "";
+
+  let districts = [];
+  let jkList = [];
+  let curators = [];
+
+  try {
+    [districts, jkList, curators] = await Promise.all([
+      window.desktopApi.getDistricts(),
+      window.desktopApi.getJkList(),
+      window.desktopApi.getCurators(),
+    ]);
+  } catch (err) {
+    if (err && err.status === 401) {
+      setCreatePanelOpen(false);
+      toast("Сессия устарела", "Войдите снова.", "danger");
+      await showLogin("Сессия устарела. Выполните вход снова.");
+      throw err;
+    }
+    const message = (err && err.message) ? err.message : "Не удалось загрузить справочники";
+    if (createVariantError) {
+      createVariantError.textContent = message;
+      setHidden(createVariantError, false);
+    }
+    toast("Ошибка", message, "danger");
+  }
+
+  if (variantDistrictSelect) {
+    setSelectOptions(variantDistrictSelect, Array.isArray(districts) ? districts : [], "Выберите район", "id", "name");
+    variantDistrictSelect.disabled = false;
+  }
+  if (variantJkSelect) {
+    const jk = Array.isArray(jkList) ? jkList : [];
+    setSelectOptions(variantJkSelect, jk, "Выберите ЖК", "id", "name", (r) => {
+      const n = r.name || `ЖК #${r.id}`;
+      const a = r.address ? ` — ${r.address}` : "";
+      return n + a;
+    });
+  }
+  if (variantCuratorSelect) {
+    variantCuratorSelect.innerHTML = "";
+    const ph = document.createElement("option");
+    ph.value = "";
+    ph.textContent = role === "REALTOR" ? "Вы (по умолчанию — вы)" : "Выберите куратора";
+    variantCuratorSelect.appendChild(ph);
+
+    if (role === "REALTOR" && myId != null) {
+      const o = document.createElement("option");
+      o.value = String(myId);
+      o.textContent = myName || `ID ${myId}`;
+      o.selected = true;
+      variantCuratorSelect.appendChild(o);
+      variantCuratorSelect.disabled = true;
+    } else {
+      variantCuratorSelect.disabled = false;
+      const list = Array.isArray(curators) ? curators : [];
+      for (const c of list) {
+        const o = document.createElement("option");
+        o.value = String(c.id);
+        o.textContent = c.name || `ID ${c.id}`;
+        variantCuratorSelect.appendChild(o);
+      }
+    }
+  }
+
+  if (variantSubdistrictSelect) {
+    variantSubdistrictSelect.innerHTML = `<option value="">Сначала выберите район</option>`;
+    variantSubdistrictSelect.disabled = true;
+  }
+
+  updatePricePerMkvHint();
+  updateApartmentFieldsVisibility();
 }
 
 async function renderVariants() {
@@ -759,10 +915,32 @@ if (toggleCreateVariantBtn) {
     setCreatePanelOpen(!isOpen);
     setHidden(createVariantError, true);
     if (!isOpen) {
-      await loadVariantTypesSelect();
+      try {
+        await loadCreateVariantReference();
+      } catch {
+        // 401 и др. уже обработаны
+      }
     }
   });
 }
+
+if (variantDistrictSelect) {
+  variantDistrictSelect.addEventListener("change", async () => {
+    const v = variantDistrictSelect.value;
+    try {
+      await loadSubdistrictsForDistrict(v);
+    } catch {
+      // сообщения уже показаны
+    }
+  });
+}
+
+if (variantTypeSelect) {
+  variantTypeSelect.addEventListener("change", () => updateApartmentFieldsVisibility());
+}
+
+if (variantPriceInput) variantPriceInput.addEventListener("input", updatePricePerMkvHint);
+if (variantMkvInput) variantMkvInput.addEventListener("input", updatePricePerMkvHint);
 
 if (cancelCreateVariantBtn) {
   cancelCreateVariantBtn.addEventListener("click", () => {
@@ -813,6 +991,11 @@ if (createVariantForm) {
     const etaj = variantEtajInput ? Number(variantEtajInput.value) : NaN;
     const etajnost = variantEtajnostInput ? Number(variantEtajnostInput.value) : NaN;
 
+    const district_id = variantDistrictSelect ? variantDistrictSelect.value.trim() : "";
+    const subdistrict_id = variantSubdistrictSelect ? variantSubdistrictSelect.value.trim() : "";
+    const zhk_id = variantJkSelect ? variantJkSelect.value.trim() : "";
+    const curator_id = variantCuratorSelect ? variantCuratorSelect.value.trim() : "";
+
     const errors = [];
     if (!type_id) errors.push("Выберите тип");
     if (!Number.isFinite(price) || price <= 0) errors.push("Цена должна быть > 0");
@@ -821,6 +1004,7 @@ if (createVariantForm) {
     if (!address) errors.push("Адрес обязателен");
     if (!Number.isFinite(etaj) || etaj <= 0) errors.push("Этаж должен быть > 0");
     if (!Number.isFinite(etajnost) || etajnost <= 0) errors.push("Этажность должна быть > 0");
+    if (subdistrict_id && !district_id) errors.push("Выберите район для микрорайона");
 
     if (errors.length > 0) {
       createVariantError.textContent = errors.join(". ");
@@ -838,6 +1022,31 @@ if (createVariantForm) {
       etaj,
       etajnost,
     };
+
+    if (district_id) payload.district_id = Number(district_id);
+    if (subdistrict_id) payload.subdistrict_id = Number(subdistrict_id);
+    if (zhk_id) payload.zhk_id = Number(zhk_id);
+    if (curator_id) payload.curator_id = Number(curator_id);
+
+    const owner_name = variantOwnerNameInput ? variantOwnerNameInput.value.trim() : "";
+    const owner_phone = variantOwnerPhoneInput ? variantOwnerPhoneInput.value.trim() : "";
+    const phone = variantPhoneInput ? variantPhoneInput.value.trim() : "";
+    const status = variantStatusInput ? variantStatusInput.value.trim() : "";
+    const description = variantDescriptionInput ? variantDescriptionInput.value.trim() : "";
+    const notes = variantNotesInput ? variantNotesInput.value.trim() : "";
+    if (owner_name) payload.owner_name = owner_name;
+    if (owner_phone) payload.owner_phone = owner_phone;
+    if (phone) payload.phone = phone;
+    if (status) payload.status = status;
+    if (description) payload.description = description;
+    if (notes) payload.notes = notes;
+
+    const repair = variantRepairInput ? variantRepairInput.value.trim() : "";
+    const series = variantSeriesInput ? variantSeriesInput.value.trim() : "";
+    const rooms = variantRoomsInput ? variantRoomsInput.value.trim() : "";
+    if (repair) payload.repair = repair;
+    if (series) payload.series = series;
+    if (rooms) payload.rooms = rooms;
 
     setVariantsUiLoading(createVariantBtn, true);
     try {
