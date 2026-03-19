@@ -1955,8 +1955,13 @@ app.post("/api/variants", authenticate, async (req, res) => {
   }
 });
 
-app.get("/public/properties/:id(\\d+)", async (req, res) => {
+app.get("/public/properties/:id", async (req, res) => {
   const { id } = req.params;
+
+  // Fix route collision: this handler would otherwise intercept "/public/properties/types".
+  if (id === "types") {
+    return res.status(404).json({ error: "Endpoint не найден" });
+  }
 
   if (!id || isNaN(parseInt(id))) {
     console.warn("Invalid property ID:", id);
