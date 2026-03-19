@@ -1978,13 +1978,81 @@ app.post("/api/variants", authenticate, async (req, res) => {
   }
 });
 
+// Важно: объявлять ДО /public/properties/:id — иначе "types" и "curator-phone" матчятся как :id
+app.get("/public/properties/types", async (req, res) => {
+  let connection;
+  try {
+    console.log("Запрос на /public/properties/types от:", req.get("origin"));
+    connection = await pool.getConnection();
+    const [tables] = await connection.execute("SHOW TABLES LIKE 'properties'");
+    if (!tables.length) {
+      console.warn("Таблица properties не найдена");
+      return res.status(200).json([]);
+    }
+
+    const [rows] = await connection.execute(
+      "SELECT DISTINCT type_id FROM properties WHERE type_id IS NOT NULL"
+    );
+    if (!rows.length) {
+      console.warn("Типы недвижимости не найдены в базе данных");
+      return res.status(200).json([]);
+    }
+    const types = rows.map((row) => row.type_id);
+    console.log("Полученные типы недвижимости:", types);
+    res.status(200).json(types);
+  } catch (error) {
+    console.error("Ошибка при получении типов недвижимости:", {
+      message: error.message,
+      stack: error.stack,
+      origin: req.get("origin"),
+    });
+    res.status(500).json({ error: `Ошибка сервера: ${error.message}` });
+  } finally {
+    if (connection) connection.release();
+  }
+});
+
+app.get("/public/properties/curator-phone", async (req, res) => {
+  const { curator_id } = req.query;
+
+  if (!curator_id || isNaN(parseInt(curator_id))) {
+    console.warn("Invalid curator_id:", curator_id);
+    return res.status(400).json({ error: "curator_id обязателен и должен быть числом" });
+  }
+
+  let connection;
+  try {
+    console.log("Запрос на /public/properties/curator-phone от:", req.get("origin"), "с curator_id:", curator_id);
+    connection = await pool.getConnection();
+
+    const [users] = await connection.execute(
+      "SELECT phone FROM users1 WHERE id = ?",
+      [parseInt(curator_id)]
+    );
+
+    if (users.length === 0) {
+      console.warn("Куратор с ID", curator_id, "не найден");
+      return res.status(404).json({ error: "Куратор не найден" });
+    }
+
+    const phone = users[0].phone;
+    console.log("Номер телефона куратора:", phone);
+    res.status(200).json({ phone });
+  } catch (error) {
+    console.error("Ошибка при получении номера телефона куратора:", {
+      message: error.message,
+      stack: error.stack,
+      origin: req.get("origin"),
+      curator_id,
+    });
+    res.status(500).json({ error: `Ошибка сервера: ${error.message}` });
+  } finally {
+    if (connection) connection.release();
+  }
+});
+
 app.get("/public/properties/:id", async (req, res) => {
   const { id } = req.params;
-
-  // Fix route collision: this handler would otherwise intercept "/public/properties/types".111
-  if (id === "types") {
-    return res.status(404).json({ error: "Endpoint не найден" });
-  }
 
   if (!id || isNaN(parseInt(id))) {
     console.warn("Invalid property ID:", id);
@@ -2241,45 +2309,6 @@ app.get("/aipublic/properties", async (req, res) => {
   }
 });
 
-app.get("/public/properties/curator-phone", async (req, res) => {
-  const { curator_id } = req.query;
-
-  if (!curator_id || isNaN(parseInt(curator_id))) {
-    console.warn("Invalid curator_id:", curator_id);
-    return res.status(400).json({ error: "curator_id обязателен и должен быть числом" });
-  }
-
-  let connection;
-  try {
-    console.log("Запрос на /public/properties/curator-phone от:", req.get('origin'), "с curator_id:", curator_id);
-    connection = await pool.getConnection();
-
-    const [users] = await connection.execute(
-      "SELECT phone FROM users1 WHERE id = ?",
-      [parseInt(curator_id)]
-    );
-
-    if (users.length === 0) {
-      console.warn("Куратор с ID", curator_id, "не найден");
-      return res.status(404).json({ error: "Куратор не найден" });
-    }
-
-    const phone = users[0].phone;
-    console.log("Номер телефона куратора:", phone);
-    res.status(200).json({ phone });
-  } catch (error) {
-    console.error("Ошибка при получении номера телефона куратора:", {
-      message: error.message,
-      stack: error.stack,
-      origin: req.get('origin'),
-      curator_id
-    });
-    res.status(500).json({ error: `Ошибка сервера: ${error.message}` });
-  } finally {
-    if (connection) connection.release();
-  }
-});
-
 
 // Публичный эндпоинт для получения списка ЖК
 // Public endpoint for JK (zhk)
@@ -2330,41 +2359,6 @@ app.get("/public/subdistricts", async (req, res) => {
   } catch (error) {
     console.error("Error fetching subdistricts:", error);
     res.status(500).json({ error: "Internal server error" });
-  } finally {
-    if (connection) connection.release();
-  }
-});
-
-
-// Endpoint для типов недвижимости
-app.get("/public/properties/types", async (req, res) => {
-  let connection;
-  try {
-    console.log("Запрос на /public/properties/types от:", req.get('origin'));
-    connection = await pool.getConnection();
-    const [tables] = await connection.execute("SHOW TABLES LIKE 'properties'");
-    if (!tables.length) {
-      console.warn("Таблица properties не найдена");
-      return res.status(200).json([]);
-    }
-
-    const [rows] = await connection.execute(
-      "SELECT DISTINCT type_id FROM properties WHERE type_id IS NOT NULL"
-    );
-    if (!rows.length) {
-      console.warn("Типы недвижимости не найдены в базе данных");
-      return res.status(200).json([]);
-    }
-    const types = rows.map(row => row.type_id);
-    console.log("Полученные типы недвижимости:", types);
-    res.status(200).json(types);
-  } catch (error) {
-    console.error("Ошибка при получении типов недвижимости:", {
-      message: error.message,
-      stack: error.stack,
-      origin: req.get('origin')
-    });
-    res.status(500).json({ error: `Ошибка сервера: ${error.message}` });
   } finally {
     if (connection) connection.release();
   }
