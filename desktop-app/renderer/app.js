@@ -1008,21 +1008,29 @@ async function renderVariants() {
     // SUPER_ADMIN + режим "Мои": на бэке может прилететь всё.
     // Фильтруем до рендера, чтобы в таблице сразу был только "мой" список.
     if (needClientFilterSuperAdminMine && safe.length && Number.isFinite(myId)) {
-      showLoading("Фильтрую ваши варианты...");
-      try {
-        const filtered = [];
-        for (let i = 0; i < safe.length; i++) {
-          if (authInvalid) return;
-          const row = safe[i];
-          const d = await window.desktopApi.getVariantDetail(row.id);
-          const curatorId = d ? Number(d.curator_id) : NaN;
-          if (Number.isFinite(curatorId) && curatorId === myId) {
-            filtered.push(row);
-          }
-        }
+      // Prefer local filtering by curator_id (if backend returns it).
+      const hasCuratorId = safe.some((r) => r && r.curator_id !== undefined && r.curator_id !== null);
+      if (hasCuratorId) {
+        const filtered = safe.filter((r) => Number(r.curator_id) === myId);
         safe.splice(0, safe.length, ...filtered);
-      } finally {
-        hideLoading();
+      } else {
+        // Fallback for older backend versions (slower, requires N calls).
+        showLoading("Фильтрую ваши варианты...");
+        try {
+          const filtered = [];
+          for (let i = 0; i < safe.length; i++) {
+            if (authInvalid) return;
+            const row = safe[i];
+            const d = await window.desktopApi.getVariantDetail(row.id);
+            const curatorId = d ? Number(d.curator_id) : NaN;
+            if (Number.isFinite(curatorId) && curatorId === myId) {
+              filtered.push(row);
+            }
+          }
+          safe.splice(0, safe.length, ...filtered);
+        } finally {
+          hideLoading();
+        }
       }
 
       setHidden(variantsEmpty, safe.length !== 0 ? true : false);

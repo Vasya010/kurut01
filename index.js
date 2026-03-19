@@ -103,7 +103,9 @@ app.use('/images', express.static(path.join(__dirname, 'public/images')));
 
 // JWT Authentication Middleware
 const authenticate = async (req, res, next) => {
-  const token = req.headers.authorization?.split(" ")[1];
+  // Authorization: "Bearer <jwt>"
+  const auth = req.headers.authorization;
+  const token = auth ? auth.split(/\s+/)[1]?.trim() : undefined;
   if (!token) {
     console.error("Authentication error: Token missing");
     return res.status(401).json({ error: "Токен отсутствует" });
@@ -137,9 +139,32 @@ const authenticate = async (req, res, next) => {
     req.user = { ...decoded, first_name: users[0].first_name, last_name: users[0].last_name };
     next();
   } catch (error) {
+    // Fallback: if JWT verification fails but token exists in DB,
+    // treat it as a valid session token (prevents logout loops on token mismatch).
+    try {
+      const connection = await pool.getConnection();
+      const [users] = await connection.execute(
+        "SELECT id, role, first_name, last_name, token FROM users1 WHERE token = ? LIMIT 1",
+        [token]
+      );
+      connection.release();
+
+      if (users.length > 0) {
+        req.user = {
+          id: users[0].id,
+          role: users[0].role,
+          first_name: users[0].first_name,
+          last_name: users[0].last_name,
+        };
+        return next();
+      }
+    } catch (e) {
+      // ignore fallback errors and fallthrough to 401
+    }
+
     console.error("Authentication error:", {
       message: error.message,
-      stack: error.stack
+      stack: error.stack,
     });
     res.status(401).json({ error: "Недействительный токен" });
   }
@@ -1817,6 +1842,7 @@ app.get("/api/variants", authenticate, async (req, res) => {
     const whereSql = whereParts.join(" AND ");
     const [rows] = await connection.execute(
       `SELECT p.id, p.price, p.mkv, p.status, p.address, p.created_at
+       , p.curator_id
        FROM properties p
        WHERE ${whereSql}
        ORDER BY p.created_at DESC`,
@@ -1831,6 +1857,7 @@ app.get("/api/variants", authenticate, async (req, res) => {
       district: row.address,
       price: row.price,
       status: row.status,
+      curator_id: row.curator_id ?? null,
     }));
 
     res.json(variants);
