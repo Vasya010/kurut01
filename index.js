@@ -2285,6 +2285,43 @@ app.post("/api/variants", authenticate, async (req, res) => {
   }
 });
 
+/**
+ * Публичная информация об обновлениях desktop-клиента (без авторизации).
+ * На сервере задайте переменные окружения при выходе новой сборки:
+ *   DESKTOP_LATEST_VERSION — например 1.1.0
+ *   DESKTOP_DOWNLOAD_URL   — прямая ссылка на установщик или страницу загрузки
+ *   DESKTOP_RELEASE_NOTES  — пункты через | (вертикальная черта)
+ *   DESKTOP_UPDATE_MESSAGE — короткий текст баннера (необязательно)
+ */
+app.get("/public/desktop/update", (req, res) => {
+  try {
+    const latestVersion = (process.env.DESKTOP_LATEST_VERSION || "1.0.0").trim();
+    const downloadUrl = (process.env.DESKTOP_DOWNLOAD_URL || "").trim();
+    const message = (process.env.DESKTOP_UPDATE_MESSAGE || "").trim() ||
+      "Версия клиента на сервере задаётся администратором (переменные DESKTOP_*).";
+    let releaseNotes = [
+      "При публикации новой версии укажите DESKTOP_LATEST_VERSION и при необходимости DESKTOP_DOWNLOAD_URL.",
+    ];
+    if (process.env.DESKTOP_RELEASE_NOTES) {
+      releaseNotes = String(process.env.DESKTOP_RELEASE_NOTES)
+        .split("|")
+        .map((s) => s.trim())
+        .filter(Boolean);
+    }
+    res.json({
+      latestVersion,
+      downloadUrl,
+      releaseNotes,
+      message,
+      /** После установки нового .exe рекомендуется полностью закрыть и снова открыть приложение */
+      reloadAfterInstall: true,
+    });
+  } catch (error) {
+    console.error("public/desktop/update:", error);
+    res.status(500).json({ error: "Не удалось сформировать ответ об обновлении" });
+  }
+});
+
 // Важно: объявлять ДО /public/properties/:id — иначе "types" и "curator-phone" матчятся как :id
 app.get("/public/properties/types", async (req, res) => {
   let connection;

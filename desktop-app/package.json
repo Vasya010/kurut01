@@ -4,16 +4,19 @@
   "private": true,
   "main": "main.js",
   "author": "Василий К",
-  "description": "Kurut Desktop — Windows 10/11, только x64",
+  "description": "Kurut Desktop — Windows 10/11, x64",
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder --win --x64",
-    "dist:dir": "electron-builder --win --x64 --dir"
+    "pack": "cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --dir --win --x64",
+    "dist": "cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win --x64 --publish never",
+    "dist:portable": "cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win portable --x64 --publish never",
+    "dist:dir": "cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win --x64 --dir --publish never"
   },
   "dependencies": {
     "electron-store": "^9.0.0"
   },
   "devDependencies": {
+    "cross-env": "^7.0.3",
     "electron": "^30.0.0",
     "electron-builder": "^24.13.3"
   },
@@ -24,34 +27,40 @@
     "directories": {
       "output": "dist"
     },
+    "asar": true,
     "files": [
-      "main.js",
-      "preload.js",
-      "renderer/**/*"
+      "**/*",
+      "!dist",
+      "!dist/**/*",
+      "!*.md",
+      "!**/*.map"
     ],
     "win": {
       "target": [
         {
           "target": "nsis",
-          "arch": [
-            "x64"
-          ]
+          "arch": ["x64"]
         }
       ],
-      "artifactName": "${productName}-${version}-win-x64.${ext}",
-      "legalTrademarks": "Kurut Desktop"
+      "artifactName": "${productName}-${version}-win-x64-setup.${ext}",
+      "legalTrademarks": "Kurut Desktop",
+      "signAndEditExecutable": false,
+      "signDlls": false
     },
     "nsis": {
       "oneClick": false,
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
-      "installerLanguages": [
-        "Russian",
-        "English"
-      ],
-      "language": "1049",
+      "allowElevation": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
       "shortcutName": "Kurut Desktop",
-      "uninstallDisplayName": "Kurut Desktop"
+      "uninstallDisplayName": "Kurut Desktop",
+      "installerLanguages": ["ru_RU", "en_US"],
+      "language": "1049"
+    },
+    "portable": {
+      "artifactName": "${productName}-${version}-win-x64-portable.${ext}"
     }
   }
 }

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog } = require("electron");
+const { app, BrowserWindow, ipcMain, dialog, Menu, shell } = require("electron");
 const path = require("path");
 const os = require("os");
 
@@ -15,6 +15,8 @@ function winBackgroundMaterial() {
 const DEFAULT_BASE_URL = "https://vasya010-kurut01-710e.twc1.net";
 
 let store = null;
+/** @type {import("electron").BrowserWindow | null} */
+let mainWindow = null;
 
 async function ensureStore() {
   if (store) return store;
@@ -237,6 +239,55 @@ ipcMain.handle("ping-api", async (_event, { baseUrl } = {}) => {
     baseUrlOverride: baseUrl,
   });
   return { ok: true, data };
+});
+
+ipcMain.handle("get-app-version", () => app.getVersion());
+
+ipcMain.handle("fetch-desktop-update-info", async () => {
+  const baseUrl = (await getBaseUrl()).replace(/\/$/, "");
+  const url = `${baseUrl}/public/desktop/update`;
+  try {
+    const res = await fetch(url, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+    });
+    const text = await res.text();
+    let data = {};
+    if (text) {
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = {};
+      }
+    }
+    if (!res.ok) {
+      return {
+        ok: false,
+        error: (data && (data.error || data.message)) || `HTTP ${res.status}`,
+        status: res.status,
+      };
+    }
+    return { ok: true, data };
+  } catch (err) {
+    return {
+      ok: false,
+      error: (err && err.message) ? err.message : "Не удалось связаться с сервером",
+    };
+  }
+});
+
+ipcMain.handle("open-external-url", async (_event, url) => {
+  const u = String(url || "").trim();
+  if (!u || !/^https?:\/\//i.test(u)) {
+    throw new Error("Некорректная ссылка");
+  }
+  await shell.openExternal(u);
+  return { ok: true };
+});
+
+ipcMain.handle("relaunch-app", () => {
+  app.relaunch();
+  app.exit(0);
 });
 
 ipcMain.handle("clear-auth", async () => {
@@ -637,6 +688,78 @@ ipcMain.handle("create-property-with-files", async (_event, { payload = {}, phot
   }
 });
 
+// Update property with photos/documents (multipart PUT)
+ipcMain.handle("update-property-with-files", async (_event, { id, payload = {}, photos = [], document = null } = {}) => {
+  const token = await getToken();
+  if (!token) throw new Error("Не авторизован");
+
+  const sid = id !== undefined && id !== null ? String(id).trim() : "";
+  if (!sid) throw new Error("ID объекта обязателен");
+
+  const form = new FormData();
+
+  for (const [key, value] of Object.entries(payload || {})) {
+    if (value === undefined || value === null) continue;
+    const v = typeof value === "string" ? value.trim() : value;
+    if (v === "" || v === undefined || v === null) continue;
+    form.append(key, String(v));
+  }
+
+  const safePhotos = Array.isArray(photos) ? photos : [];
+  for (const p of safePhotos) {
+    if (!p || !p.base64) continue;
+    const mime = p.mime || "application/octet-stream";
+    const filename = p.filename || "photo";
+    const buf = Buffer.from(String(p.base64), "base64");
+    const blob = new Blob([buf], { type: mime });
+    form.append("photos", blob, filename);
+  }
+
+  if (document && document.base64) {
+    const mime = document.mime || "application/octet-stream";
+    const filename = document.filename || "document";
+    const buf = Buffer.from(String(document.base64), "base64");
+    const blob = new Blob([buf], { type: mime });
+    form.append("document", blob, filename);
+  }
+
+  try {
+    return await apiFetchFormData(`/api/properties/${encodeURIComponent(sid)}`, {
+      method: "PUT",
+      token,
+      bodyFormData: form,
+    });
+  } catch (err) {
+    if (err && err.status === 401) {
+      const s = store;
+      if (s) {
+        s.delete("token");
+        s.delete("user");
+      }
+    }
+    throw err;
+  }
+});
+
+ipcMain.handle("delete-property", async (_event, { id } = {}) => {
+  const token = await getToken();
+  if (!token) throw new Error("Не авторизован");
+  const sid = id !== undefined && id !== null ? String(id).trim() : "";
+  if (!sid) throw new Error("ID объекта обязателен");
+  try {
+    return await apiFetch(`/api/properties/${encodeURIComponent(sid)}`, { method: "DELETE", token });
+  } catch (err) {
+    if (err && err.status === 401) {
+      const s = store;
+      if (s) {
+        s.delete("token");
+        s.delete("user");
+      }
+    }
+    throw err;
+  }
+});
+
 async function apiFetchFormData(endpoint, { method = "POST", token, bodyFormData } = {}) {
   const baseUrl = (await getBaseUrl()).replace(/\/$/, "");
   const url = endpoint.startsWith("http") ? endpoint : `${baseUrl}${endpoint}`;
@@ -763,12 +886,13 @@ function createWindow() {
   const material = winBackgroundMaterial();
   const win = new BrowserWindow({
     title: "Kurut Desktop",
-    width: 1220,
-    height: 760,
-    minWidth: 1000,
-    minHeight: 640,
+    width: 1280,
+    height: 800,
+    minWidth: 900,
+    minHeight: 560,
     show: false,
     backgroundColor: "#0b1220",
+    fullscreenable: true,
     ...(material ? { backgroundMaterial: material } : {}),
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
@@ -778,8 +902,18 @@ function createWindow() {
     },
   });
 
+  mainWindow = win;
+  attachWindowShortcuts(win);
+
   win.loadFile(path.join(__dirname, "renderer", "index.html"));
-  win.once("ready-to-show", () => win.show());
+  win.once("ready-to-show", () => {
+    try {
+      win.maximize();
+    } catch {
+      /* ignore */
+    }
+    win.show();
+  });
 }
 
 app.whenReady().then(() => {
@@ -792,6 +926,7 @@ app.whenReady().then(() => {
     return;
   }
 
+  buildAppMenu();
   createWindow();
 
   app.on("activate", () => {
@@ -801,5 +936,91 @@ app.whenReady().then(() => {
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
+});
+
+function attachWindowShortcuts(win) {
+  win.webContents.on("before-input-event", (event, input) => {
+    if (input.type !== "keyDown") return;
+    if (input.key === "F11") {
+      win.setFullScreen(!win.isFullScreen());
+      event.preventDefault();
+      return;
+    }
+    if (input.key === "Enter" && input.alt) {
+      if (win.isMaximized()) win.unmaximize();
+      else win.maximize();
+      event.preventDefault();
+    }
+  });
+}
+
+function buildAppMenu() {
+  const template = [
+    {
+      label: "Файл",
+      submenu: [{ role: "quit", label: "Выход" }],
+    },
+    {
+      label: "Вид",
+      submenu: [
+        {
+          label: "Полный экран (F11)",
+          click: () => {
+            const w = BrowserWindow.getFocusedWindow() || mainWindow;
+            if (w) w.setFullScreen(!w.isFullScreen());
+          },
+        },
+        {
+          label: "Развернуть окно (Alt+Enter)",
+          click: () => {
+            const w = BrowserWindow.getFocusedWindow() || mainWindow;
+            if (!w) return;
+            if (w.isMaximized()) w.unmaximize();
+            else w.maximize();
+          },
+        },
+        { type: "separator" },
+        {
+          label: "Сбросить масштаб",
+          role: "resetZoom",
+        },
+      ],
+    },
+    {
+      label: "Окно",
+      submenu: [{ role: "minimize", label: "Свернуть" }],
+    },
+  ];
+  if (process.platform === "darwin") {
+    template.unshift({
+      label: app.name,
+      submenu: [
+        { role: "about" },
+        { type: "separator" },
+        { role: "quit" },
+      ],
+    });
+  }
+  const menu = Menu.buildFromTemplate(template);
+  Menu.setApplicationMenu(menu);
+}
+
+ipcMain.handle("window-toggle-maximized", () => {
+  const w = BrowserWindow.getFocusedWindow() || mainWindow;
+  if (!w || w.isDestroyed()) return { maximized: false, fullscreen: false };
+  if (w.isFullScreen()) {
+    w.setFullScreen(false);
+    return { maximized: w.isMaximized(), fullscreen: false };
+  }
+  if (w.isMaximized()) w.unmaximize();
+  else w.maximize();
+  return { maximized: w.isMaximized(), fullscreen: w.isFullScreen() };
+});
+
+ipcMain.handle("window-toggle-fullscreen", () => {
+  const w = BrowserWindow.getFocusedWindow() || mainWindow;
+  if (!w || w.isDestroyed()) return { fullscreen: false };
+  w.setFullScreen(!w.isFullScreen());
+  return { fullscreen: w.isFullScreen() };
 });
 

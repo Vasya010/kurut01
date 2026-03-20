@@ -27,113 +27,175 @@
       </div>
     </div>
 
-    <div id="loginView" class="view">
-      <div class="bg">
+    <div id="loginView" class="view login-view">
+      <div class="login-bg" aria-hidden="true">
+        <div class="login-bg-mesh"></div>
         <div class="bg-glow g1"></div>
         <div class="bg-glow g2"></div>
+        <div class="login-bg-noise"></div>
       </div>
 
-      <div class="auth-wrap">
-        <div class="auth-card">
-          <div class="brand">
-            <div class="logo-mark" aria-hidden="true">K</div>
-            <div class="brand-text">
-              <div class="brand-title">Kurut</div>
-              <div class="brand-subtitle">Админ доступ</div>
+      <div class="login-shell">
+        <div class="login-grid">
+          <aside class="login-aside" aria-label="О приложении">
+            <div class="login-aside-content">
+              <div class="login-aside-brand">
+                <div class="login-aside-logo" aria-hidden="true">K</div>
+                <div class="login-aside-brand-text">
+                  <span class="login-aside-name">Kurut</span>
+                  <span class="login-aside-badge">Desktop</span>
+                </div>
+              </div>
+              <p class="login-aside-kicker">Администрирование</p>
+              <h2 class="login-aside-title">Всё под контролем в одном окне</h2>
+              <p class="login-aside-text">
+                Объявления, варианты недвижимости, филиалы, пользователи и справочники — быстрый доступ с рабочего ПК.
+              </p>
+              <ul class="login-aside-list">
+                <li>
+                  <span class="login-aside-check" aria-hidden="true">✓</span>
+                  Безопасная авторизация по email
+                </li>
+                <li>
+                  <span class="login-aside-check" aria-hidden="true">✓</span>
+                  Прямая работа с вашим API
+                </li>
+                <li>
+                  <span class="login-aside-check" aria-hidden="true">✓</span>
+                  Удобно на большом экране
+                </li>
+              </ul>
+              <div class="login-aside-meta">
+                <span class="login-aside-pulse" aria-hidden="true"></span>
+                <span>Windows · v1.0 · Василий К</span>
+              </div>
             </div>
-          </div>
+          </aside>
 
-          <div class="auth-heading">
-            <h1>Вход</h1>
-            <p>Введите email и пароль, чтобы продолжить.</p>
-          </div>
+          <div class="login-main">
+            <div class="login-card">
+              <header class="login-card-head">
+                <h1 class="login-card-h1">Вход в аккаунт</h1>
+                <p class="login-card-lead">Укажите email и пароль. Сервер можно настроить ниже, если адрес API изменился.</p>
+              </header>
 
-          <div class="auth-meta">
-            <span class="chip">Админ-панель</span>
-            <span class="chip chip-dev">
-              <span class="chip-dot" aria-hidden="true"></span>
-              Разработчик: Василий К
-            </span>
-          </div>
+              <form id="loginForm" class="login-form" autocomplete="on">
+                <div class="login-field">
+                  <label class="login-label" for="email">Email</label>
+                  <div class="login-input-shell">
+                    <span class="login-input-icon" aria-hidden="true">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+                        <path d="M22 6l-10 7L2 6" />
+                      </svg>
+                    </span>
+                    <input
+                      id="email"
+                      name="email"
+                      class="login-input login-input--with-icon"
+                      type="email"
+                      inputmode="email"
+                      autocomplete="username"
+                      placeholder="name@company.com"
+                      required
+                    />
+                  </div>
+                  <div id="emailError" class="field-error login-field-error hidden" role="alert"></div>
+                </div>
 
-          <form id="loginForm" class="form" autocomplete="off">
-            <div class="field">
-              <label for="email">Email</label>
-              <input
-                id="email"
-                name="email"
-                type="email"
-                placeholder="you@example.com"
-                required
-              />
-              <div id="emailError" class="field-error hidden" role="alert"></div>
-            </div>
+                <div class="login-field">
+                  <label class="login-label" for="password">Пароль</label>
+                  <div class="login-input-shell login-input-shell--password">
+                    <span class="login-input-icon" aria-hidden="true">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                        <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                      </svg>
+                    </span>
+                    <input
+                      id="password"
+                      name="password"
+                      class="login-input login-input--with-icon login-input--password"
+                      type="password"
+                      autocomplete="current-password"
+                      placeholder="Введите пароль"
+                      required
+                    />
+                    <button
+                      id="showPasswordBtn"
+                      class="login-pwd-toggle"
+                      type="button"
+                      aria-label="Показать пароль"
+                      aria-pressed="false"
+                      title="Показать пароль"
+                    >
+                      <span class="login-pwd-toggle-text">Показать</span>
+                    </button>
+                  </div>
+                  <div id="passwordError" class="field-error login-field-error hidden" role="alert"></div>
+                </div>
 
-            <div class="field">
-              <div class="label-row">
-                <label for="password">Пароль</label>
-                <button id="showPasswordBtn" class="link-btn" type="button" tabindex="-1">
-                  Показать
+                <label class="login-remember">
+                  <input id="rememberEmail" type="checkbox" />
+                  <span class="login-remember-ui" aria-hidden="true"></span>
+                  <span class="login-remember-label">Запомнить email на этом компьютере</span>
+                </label>
+
+                <div id="loginError" class="alert login-alert hidden" role="alert"></div>
+
+                <button id="loginBtn" class="login-submit primary-btn" type="submit">
+                  <span class="btn-text">Войти</span>
+                  <span id="loginSpinner" class="spinner hidden" aria-hidden="true"></span>
                 </button>
-              </div>
-              <input id="password" name="password" type="password" placeholder="••••••••" required />
-              <div id="passwordError" class="field-error hidden" role="alert"></div>
+              </form>
+
+              <details class="login-details" id="loginServerDetails">
+                <summary class="login-details-summary">
+                  <span class="login-details-icon" aria-hidden="true">⚙</span>
+                  <span class="login-details-title">Сервер и API</span>
+                  <span id="serverPill" class="server-pill login-details-pill">HTTP API</span>
+                  <span class="login-details-chevron" aria-hidden="true"></span>
+                </summary>
+                <div class="connection-card login-connection-card">
+                  <div class="connection-head">
+                    <div class="connection-title">Адрес бэкенда</div>
+                    <div class="connection-subtitle">Проверьте доступность перед входом, если меняли URL</div>
+                  </div>
+
+                  <div class="connection-grid">
+                    <div class="field compact login-conn-field">
+                      <label for="baseUrl">Base URL</label>
+                      <input id="baseUrl" type="url" placeholder="https://ваш-сервер.twc1.net" />
+                      <div class="hint">Обычно менять не нужно — подставляется из настроек.</div>
+                      <div id="baseUrlSavedStatus" class="hint" aria-live="polite"></div>
+                    </div>
+
+                    <div class="connection-actions-col">
+                      <button id="testBaseUrlBtn" class="secondary-btn compact" type="button">Проверить</button>
+                      <button id="saveBaseUrlBtn" class="secondary-btn" type="button">Сохранить</button>
+                    </div>
+                  </div>
+
+                  <div id="connectionStatus" class="conn-status hidden" aria-live="polite"></div>
+                </div>
+              </details>
             </div>
-
-            <div class="field">
-              <label class="checkbox-row">
-                <input id="rememberEmail" type="checkbox" />
-                <span>Запомнить email на этом ПК</span>
-              </label>
-            </div>
-
-            <div class="form-actions">
-              <button id="loginBtn" class="primary-btn" type="submit">
-                <span class="btn-text">Войти</span>
-                <span id="loginSpinner" class="spinner hidden" aria-hidden="true"></span>
-              </button>
-            </div>
-
-            <div id="loginError" class="alert hidden" role="alert"></div>
-          </form>
-
-          <div class="connection-card">
-            <div class="connection-head">
-              <div class="connection-title">
-                Настройки подключения
-                <span id="serverPill" class="server-pill">HTTP API</span>
-              </div>
-              <div class="connection-subtitle">Введите Base URL и нажмите «Проверить»</div>
-            </div>
-
-            <div class="connection-grid">
-              <div class="field compact">
-                <label for="baseUrl">API Base URL</label>
-                <input id="baseUrl" type="url" placeholder="https://vasya010-kurut01-710e.twc1.net" />
-                <div class="hint">По умолчанию установлен домен вашего бэкенда.</div>
-                <div id="baseUrlSavedStatus" class="hint" aria-live="polite"></div>
-              </div>
-
-              <div class="connection-actions-col">
-                <button id="testBaseUrlBtn" class="secondary-btn compact" type="button">Проверить</button>
-                <button id="saveBaseUrlBtn" class="secondary-btn" type="button">Сохранить</button>
-              </div>
-            </div>
-
-            <div id="connectionStatus" class="conn-status hidden" aria-live="polite"></div>
-          </div>
-
-          <div class="auth-footer">
-            <span class="dot"></span>
-            <span>Работает для Windows (ПК). Версия 1.0</span>
           </div>
         </div>
       </div>
     </div>
 
-    <div id="dashboardView" class="view hidden">
+    <div id="dashboardView" class="view dashboard-root hidden">
       <aside class="sidebar">
-        <div class="sidebar-top">
+        <div class="sidebar-brand">
+          <div class="sidebar-logo-mark" aria-hidden="true">K</div>
+          <div class="sidebar-brand-text">
+            <span class="sidebar-brand-name">Kurut</span>
+            <span class="sidebar-brand-sub">Админ-панель</span>
+          </div>
+        </div>
+
+        <div class="sidebar-user-card">
           <div class="user">
             <div id="userAvatar" class="avatar" aria-hidden="true">U</div>
             <div class="user-meta">
@@ -143,46 +205,136 @@
           </div>
         </div>
 
-        <nav class="nav">
+        <nav class="nav nav-dashboard" aria-label="Основные разделы">
           <button id="navListings" class="nav-item active" type="button">
-            Объявления
+            <span class="nav-item-icon" aria-hidden="true">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M4 6h16M4 12h10M4 18h16" stroke-linecap="round" />
+              </svg>
+            </span>
+            <span class="nav-item-label">Объявления</span>
           </button>
-          <button id="navRaions" class="nav-item" type="button">Районы</button>
-          <button id="navBranches" class="nav-item" type="button">Филиалы</button>
-          <button id="navUsers" class="nav-item" type="button">Пользователи</button>
-          <button id="navTypes" class="nav-item" type="button">Варианты</button>
+          <button id="navRaions" class="nav-item" type="button">
+            <span class="nav-item-icon" aria-hidden="true">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke-linejoin="round" />
+              </svg>
+            </span>
+            <span class="nav-item-label">Районы</span>
+          </button>
+          <button id="navBranches" class="nav-item" type="button">
+            <span class="nav-item-icon" aria-hidden="true">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-4" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+            </span>
+            <span class="nav-item-label">Филиалы</span>
+          </button>
+          <button id="navUsers" class="nav-item" type="button">
+            <span class="nav-item-icon" aria-hidden="true">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                <circle cx="9" cy="7" r="4" />
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
+              </svg>
+            </span>
+            <span class="nav-item-label">Пользователи</span>
+          </button>
+          <button id="navTypes" class="nav-item" type="button">
+            <span class="nav-item-icon" aria-hidden="true">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" stroke-linejoin="round" />
+                <path d="M9 22V12h6v10" stroke-linejoin="round" />
+              </svg>
+            </span>
+            <span class="nav-item-label">Варианты</span>
+          </button>
         </nav>
 
+        <div class="sidebar-spacer" aria-hidden="true"></div>
+
         <div class="sidebar-bottom">
-          <button id="logoutBtn" class="ghost-btn" type="button">Выйти</button>
+          <button id="logoutBtn" class="sidebar-logout-btn" type="button">
+            <span class="sidebar-logout-ico" aria-hidden="true">→</span>
+            Выйти из аккаунта
+          </button>
         </div>
       </aside>
 
-      <main class="main">
+      <main class="main main-dashboard">
         <header class="topbar">
-          <div>
+          <div class="topbar-intro">
             <div id="pageTitle" class="page-title">Админ dashboard</div>
             <div id="pageSubtitle" class="page-subtitle">Список объектов недвижимости</div>
           </div>
-          <div class="topbar-actions">
-            <button id="refreshBtn" class="secondary-btn compact" type="button">Обновить</button>
-            <button id="openSettingsBtn" class="secondary-btn compact settings-entry-btn" type="button" title="Настройки приложения">⚙ Настройки</button>
+          <div class="topbar-actions" role="toolbar" aria-label="Действия">
+            <div class="topbar-group topbar-group--window">
+              <button id="toggleMaximizeBtn" class="topbar-action-btn" type="button" title="Развернуть / восстановить окно (Alt+Enter)">
+                <span class="topbar-action-ico" aria-hidden="true">⛶</span>
+                <span class="topbar-action-text">Окно</span>
+              </button>
+              <button id="toggleFullscreenBtn" class="topbar-action-btn topbar-action-btn--ghost" type="button" title="Полный экран (F11)">
+                <span class="topbar-action-ico" aria-hidden="true">▢</span>
+                <span class="topbar-action-text">На весь экран</span>
+              </button>
+            </div>
+            <div class="topbar-group topbar-group--primary">
+              <button id="refreshBtn" class="topbar-action-btn topbar-action-btn--accent" type="button">
+                <span class="topbar-action-ico" aria-hidden="true">↻</span>
+                Обновить
+              </button>
+              <button id="openSettingsBtn" class="topbar-action-btn settings-entry-btn" type="button" title="Настройки приложения">
+                <span class="topbar-action-ico" aria-hidden="true">⚙</span>
+                Настройки
+              </button>
+            </div>
           </div>
         </header>
 
-        <section class="content">
-          <div id="statsWrap" class="stats">
-            <div class="stat-card">
-              <div class="stat-value" id="statCount">0</div>
-              <div class="stat-label">Записей</div>
+        <section class="content content-dashboard">
+          <div id="statsWrap" class="stats stats-dashboard">
+            <div class="stat-card stat-card--violet">
+              <div class="stat-card-accent" aria-hidden="true"></div>
+              <div class="stat-card-inner">
+                <div class="stat-icon-wrap stat-icon-wrap--violet" aria-hidden="true">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M4 6h16M4 12h16M4 18h10" stroke-linecap="round" />
+                  </svg>
+                </div>
+                <div class="stat-text">
+                  <div class="stat-value" id="statCount">0</div>
+                  <div class="stat-label">Записей в списке</div>
+                </div>
+              </div>
             </div>
-            <div class="stat-card">
-              <div class="stat-value" id="statToday">—</div>
-              <div class="stat-label">Сегодня</div>
+            <div class="stat-card stat-card--emerald">
+              <div class="stat-card-accent" aria-hidden="true"></div>
+              <div class="stat-card-inner">
+                <div class="stat-icon-wrap stat-icon-wrap--emerald" aria-hidden="true">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                    <path d="M16 2v4M8 2v4M3 10h18" stroke-linecap="round" />
+                  </svg>
+                </div>
+                <div class="stat-text">
+                  <div class="stat-value" id="statToday">—</div>
+                  <div class="stat-label">Сегодня по дате</div>
+                </div>
+              </div>
             </div>
-            <div class="stat-card">
-              <div class="stat-value" id="statPriceAvg">—</div>
-              <div class="stat-label">Средняя цена</div>
+            <div class="stat-card stat-card--amber">
+              <div class="stat-card-accent" aria-hidden="true"></div>
+              <div class="stat-card-inner">
+                <div class="stat-icon-wrap stat-icon-wrap--amber" aria-hidden="true">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" stroke-linecap="round" stroke-linejoin="round" />
+                  </svg>
+                </div>
+                <div class="stat-text">
+                  <div class="stat-value" id="statPriceAvg">—</div>
+                  <div class="stat-label">Средняя цена</div>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -478,6 +630,7 @@
                       <th>Площадь</th>
                       <th>Цена</th>
                       <th>Статус</th>
+                      <th id="variantsActionsTh" class="hidden">Действия</th>
                     </tr>
                   </thead>
                   <tbody id="variantsTbody"></tbody>
@@ -535,17 +688,29 @@
               <div class="settings-brand-mark" aria-hidden="true">K</div>
               <div>
                 <div class="modal-title">Настройки</div>
-                <div id="settingsSubtitle" class="modal-subtitle">Сервер, внешний вид, поведение и уведомления — всё в одном месте</div>
+                <div id="settingsSubtitle" class="modal-subtitle">Сервер, оформление, обновления с бэкенда и поведение — в одном окне</div>
               </div>
             </div>
           </div>
           <button id="settingsCloseBtn" class="icon-btn" type="button" aria-label="Закрыть">✕</button>
         </div>
 
-        <div class="modal-form settings-body">
+        <div class="modal-form settings-shell">
+          <div class="settings-layout">
+            <nav class="settings-rail" aria-label="Разделы настроек">
+              <span class="settings-rail-title">Разделы</span>
+              <button type="button" class="settings-rail-btn active" data-settings-jump="settings-section-server">Сервер</button>
+              <button type="button" class="settings-rail-btn" data-settings-jump="settings-section-look">Внешний вид</button>
+              <button type="button" class="settings-rail-btn" data-settings-jump="settings-section-behavior">Поведение</button>
+              <button type="button" class="settings-rail-btn" data-settings-jump="settings-section-toast">Уведомления</button>
+              <button type="button" class="settings-rail-btn" data-settings-jump="settings-section-updates">Обновления</button>
+              <button type="button" class="settings-rail-btn" data-settings-jump="settings-section-roadmap">Планы</button>
+              <button type="button" class="settings-rail-btn" data-settings-jump="settings-section-account">Аккаунт</button>
+            </nav>
+            <div class="settings-body" id="settingsScrollArea">
           <div class="settings-grid">
 
-            <section class="settings-card" aria-labelledby="settings-h-server">
+            <section id="settings-section-server" class="settings-card" aria-labelledby="settings-h-server">
               <div class="settings-card-head">
                 <span class="settings-card-icon" aria-hidden="true">◎</span>
                 <div>
@@ -567,7 +732,7 @@
               </div>
             </section>
 
-            <section class="settings-card" aria-labelledby="settings-h-look">
+            <section id="settings-section-look" class="settings-card" aria-labelledby="settings-h-look">
               <div class="settings-card-head">
                 <span class="settings-card-icon" aria-hidden="true">◐</span>
                 <div>
@@ -621,7 +786,7 @@
               </div>
             </section>
 
-            <section class="settings-card" aria-labelledby="settings-h-behavior">
+            <section id="settings-section-behavior" class="settings-card" aria-labelledby="settings-h-behavior">
               <div class="settings-card-head">
                 <span class="settings-card-icon" aria-hidden="true">↻</span>
                 <div>
@@ -690,7 +855,7 @@
               </div>
             </section>
 
-            <section class="settings-card" aria-labelledby="settings-h-toast">
+            <section id="settings-section-toast" class="settings-card" aria-labelledby="settings-h-toast">
               <div class="settings-card-head">
                 <span class="settings-card-icon" aria-hidden="true">✦</span>
                 <div>
@@ -723,7 +888,76 @@
               </div>
             </section>
 
-            <section class="settings-card settings-card--span settings-card-account" aria-labelledby="settings-h-account">
+            <section id="settings-section-updates" class="settings-card settings-card--updates" aria-labelledby="settings-h-updates">
+              <div class="settings-card-head">
+                <span class="settings-card-icon" aria-hidden="true">⇪</span>
+                <div>
+                  <h3 id="settings-h-updates" class="settings-card-title">Обновления приложения</h3>
+                  <p class="settings-card-desc">
+                    Версия на сервере задаётся администратором. После установки нового установщика перезапустите Kurut Desktop.
+                  </p>
+                </div>
+              </div>
+              <div class="settings-card-body">
+                <div class="settings-update-meta">
+                  <div class="settings-update-row">
+                    <span class="settings-update-k">У вас установлено</span>
+                    <span class="settings-update-v" id="settingsLocalVersion">—</span>
+                  </div>
+                  <div class="settings-update-row">
+                    <span class="settings-update-k">На сервере (API)</span>
+                    <span class="settings-update-v" id="settingsServerVersion">—</span>
+                  </div>
+                </div>
+                <p id="settingsUpdateBanner" class="settings-update-banner hidden" role="status"></p>
+                <div id="settingsUpdateLoading" class="settings-update-loading hidden" aria-live="polite">
+                  <span class="settings-update-spinner" aria-hidden="true"></span>
+                  <span>Запрашиваем данные с сервера…</span>
+                </div>
+                <div id="settingsUpdateResult" class="settings-update-result hidden" role="region" aria-label="Результат проверки"></div>
+                <ul id="settingsUpdateNotes" class="settings-update-notes hidden" aria-label="Список изменений"></ul>
+                <div class="settings-inline-actions settings-update-actions">
+                  <button id="settingsCheckUpdateBtn" class="primary-btn compact" type="button">Проверить обновления</button>
+                  <button id="settingsOpenDownloadBtn" class="secondary-btn compact hidden" type="button">Открыть страницу загрузки</button>
+                  <button id="settingsRelaunchAppBtn" class="ghost-btn compact hidden" type="button">Перезапустить приложение</button>
+                </div>
+                <p class="field-hint settings-update-hint">
+                  Эндпоинт: <code class="settings-code">GET /public/desktop/update</code> — без токена. Настраивается на бэкенде (переменные <code class="settings-code">DESKTOP_*</code>).
+                </p>
+              </div>
+            </section>
+
+            <section id="settings-section-roadmap" class="settings-card settings-card--span settings-card-roadmap" aria-labelledby="settings-h-roadmap">
+              <div class="settings-card-head">
+                <span class="settings-card-icon" aria-hidden="true">◇</span>
+                <div>
+                  <h3 id="settings-h-roadmap" class="settings-card-title">В разработке и планы</h3>
+                  <p class="settings-card-desc">Сюда будут добавляться новые возможности — следите за обновлениями клиента и бэкенда.</p>
+                </div>
+              </div>
+              <div class="settings-card-body">
+                <ul class="settings-roadmap-list">
+                  <li>
+                    <span class="settings-roadmap-tag settings-roadmap-tag--soon">Скоро</span>
+                    <span>Расширенная работа с уведомлениями и напоминаниями по объектам</span>
+                  </li>
+                  <li>
+                    <span class="settings-roadmap-tag settings-roadmap-tag--plan">План</span>
+                    <span>Экспорт таблиц (CSV / Excel) из разделов объявлений и вариантов</span>
+                  </li>
+                  <li>
+                    <span class="settings-roadmap-tag settings-roadmap-tag--plan">План</span>
+                    <span>Горячие клавиши и быстрый поиск по всему приложению</span>
+                  </li>
+                  <li>
+                    <span class="settings-roadmap-tag settings-roadmap-tag--idea">Идея</span>
+                    <span>Синхронизация черновиков и офлайн-кэш для нестабильной сети</span>
+                  </li>
+                </ul>
+              </div>
+            </section>
+
+            <section id="settings-section-account" class="settings-card settings-card--span settings-card-account" aria-labelledby="settings-h-account">
               <div class="settings-card-head">
                 <span class="settings-card-icon" aria-hidden="true">◇</span>
                 <div>
@@ -745,11 +979,13 @@
                   <button id="settingsLogoutBtn" class="danger-outline-btn compact" type="button">Выйти из аккаунта</button>
                 </div>
                 <div class="settings-version-foot muted">
-                  Kurut Desktop · <strong>Версия 1.0</strong> · Разработчик: Василий К
+                  Kurut Desktop · <strong id="settingsAppVersionLabel">—</strong> · Разработчик: Василий К
                 </div>
               </div>
             </section>
 
+          </div>
+            </div>
           </div>
         </div>
       </div>
@@ -760,8 +996,8 @@
       <div class="modal-sheet">
         <div class="modal-top">
           <div>
-            <div class="modal-title">Добавить объект недвижимости</div>
-            <div class="modal-subtitle">Тип, районы, ЖК и кураторы подгружаются с сервера</div>
+            <div id="createVariantModalTitle" class="modal-title">Добавить объект недвижимости</div>
+            <div id="createVariantModalSubtitle" class="modal-subtitle">Тип, районы, ЖК и кураторы подгружаются с сервера</div>
           </div>
           <button id="cancelCreateVariantBtn" class="icon-btn" type="button" aria-label="Закрыть">✕</button>
         </div>
@@ -863,15 +1099,21 @@
               <div class="modal-grid modal-grid-variants apartment-inner">
                 <div class="field">
                   <label for="variantRepair">Ремонт</label>
-                  <input id="variantRepair" type="text" placeholder="Например: евроремонт" />
+                  <select id="variantRepair">
+                    <option value="">Выберите ремонт</option>
+                  </select>
                 </div>
                 <div class="field">
                   <label for="variantSeries">Серия</label>
-                  <input id="variantSeries" type="text" placeholder="Серия дома" />
+                  <select id="variantSeries">
+                    <option value="">Выберите серию</option>
+                  </select>
                 </div>
                 <div class="field">
                   <label for="variantRooms">Комнаты</label>
-                  <input id="variantRooms" type="text" placeholder="Например: 2" />
+                  <select id="variantRooms">
+                    <option value="">Выберите количество</option>
+                  </select>
                 </div>
               </div>
             </div>

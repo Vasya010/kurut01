@@ -24,7 +24,16 @@ contextBridge.exposeInMainWorld("desktopApi", {
   getVariantDetail: (id) => ipcRenderer.invoke("get-variant-detail", { id }),
   createVariant: (payload) => ipcRenderer.invoke("create-variant", payload),
   createPropertyWithFiles: (payload, photos, document) => ipcRenderer.invoke("create-property-with-files", { payload, photos, document }),
+  updatePropertyWithFiles: (id, payload, photos, document) =>
+    ipcRenderer.invoke("update-property-with-files", { id, payload, photos, document }),
+  deleteProperty: (id) => ipcRenderer.invoke("delete-property", { id }),
   createUser: (payload) => ipcRenderer.invoke("create-user", payload),
   updateUser: (id, payload) => ipcRenderer.invoke("update-user", { id, payload }),
+  windowToggleMaximized: () => ipcRenderer.invoke("window-toggle-maximized"),
+  windowToggleFullscreen: () => ipcRenderer.invoke("window-toggle-fullscreen"),
+  getAppVersion: () => ipcRenderer.invoke("get-app-version"),
+  fetchDesktopUpdateInfo: () => ipcRenderer.invoke("fetch-desktop-update-info"),
+  openExternalUrl: (url) => ipcRenderer.invoke("open-external-url", url),
+  relaunchApp: () => ipcRenderer.invoke("relaunch-app"),
 });
 

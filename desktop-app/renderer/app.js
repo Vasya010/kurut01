@@ -23,6 +23,8 @@ const rememberEmailCheckbox = $("rememberEmail");
 
 const logoutBtn = $("logoutBtn");
 const refreshBtn = $("refreshBtn");
+const toggleMaximizeBtn = $("toggleMaximizeBtn");
+const toggleFullscreenBtn = $("toggleFullscreenBtn");
 const openSettingsBtn = $("openSettingsBtn");
 const settingsPanel = $("settingsPanel");
 const settingsBackdrop = $("settingsBackdrop");
@@ -67,6 +69,18 @@ const toastEnabledInput = $("toastEnabledInput");
 const toastDurationSecSelect = $("toastDurationSecSelect");
 
 const settingsRememberEmailInput = $("settingsRememberEmail");
+
+const settingsScrollArea = $("settingsScrollArea");
+const settingsAppVersionLabel = $("settingsAppVersionLabel");
+const settingsLocalVersion = $("settingsLocalVersion");
+const settingsServerVersion = $("settingsServerVersion");
+const settingsUpdateBanner = $("settingsUpdateBanner");
+const settingsUpdateLoading = $("settingsUpdateLoading");
+const settingsUpdateResult = $("settingsUpdateResult");
+const settingsUpdateNotes = $("settingsUpdateNotes");
+const settingsCheckUpdateBtn = $("settingsCheckUpdateBtn");
+const settingsOpenDownloadBtn = $("settingsOpenDownloadBtn");
+const settingsRelaunchAppBtn = $("settingsRelaunchAppBtn");
 
 const userNameEl = $("userName");
 const userRoleEl = $("userRole");
@@ -152,8 +166,12 @@ const variantRoomsInput = $("variantRooms");
 const variantPricePerMkvHint = $("variantPricePerMkvHint");
 const variantPhotosInput = $("variantPhotos");
 const variantDocumentInput = $("variantDocument");
+const createVariantBtn = $("createVariantBtn");
 
 const variantsPanelSubtitle = $("variantsPanelSubtitle");
+const variantsActionsTh = $("variantsActionsTh");
+const createVariantModalTitle = $("createVariantModalTitle");
+const createVariantModalSubtitle = $("createVariantModalSubtitle");
 
 const variantDetailPanel = $("variantDetailPanel");
 const variantDetailBackdrop = $("variantDetailBackdrop");
@@ -261,6 +279,9 @@ let uiDensity = "comfortable"; // comfortable | compact
 let toastEnabled = true;
 let toastDurationSec = 3;
 let defaultStartTab = "listings";
+
+/** Ссылка на загрузку с последнего ответа `/public/desktop/update` */
+let lastUpdateDownloadUrl = "";
 
 let authInvalid = false; // токен устарел; фоновые запросы не делаем
 
@@ -395,7 +416,11 @@ function shakeElement(el) {
 }
 
 function setFieldError(inputEl, errorEl, message) {
-  if (inputEl) inputEl.classList.add("input-error");
+  if (inputEl) {
+    inputEl.classList.add("input-error");
+    const shell = inputEl.closest(".login-input-shell");
+    if (shell) shell.classList.add("input-error");
+  }
   if (errorEl) {
     errorEl.textContent = message || "";
     setHidden(errorEl, !message);
@@ -405,6 +430,11 @@ function setFieldError(inputEl, errorEl, message) {
 function clearFieldErrors() {
   emailInput.classList.remove("input-error");
   passwordInput.classList.remove("input-error");
+  if (loginForm) {
+    loginForm.querySelectorAll(".login-input-shell.input-error").forEach((el) => {
+      el.classList.remove("input-error");
+    });
+  }
   if (emailErrorEl) {
     emailErrorEl.textContent = "";
     setHidden(emailErrorEl, true);
@@ -427,6 +457,28 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+}
+
+/** Сравнение semver-подобных строк (1.2.3); только числовые сегменты по точкам */
+function compareSemver(a, b) {
+  const parse = (v) =>
+    String(v || "0")
+      .trim()
+      .split(".")
+      .map((x) => {
+        const n = parseInt(String(x).replace(/^[^\d]*/, "").split(/[^\d]/)[0], 10);
+        return Number.isFinite(n) ? n : 0;
+      });
+  const pa = parse(a);
+  const pb = parse(b);
+  const len = Math.max(pa.length, pb.length, 1);
+  for (let i = 0; i < len; i++) {
+    const da = pa[i] || 0;
+    const db = pb[i] || 0;
+    if (da > db) return 1;
+    if (da < db) return -1;
+  }
+  return 0;
 }
 
 function toast(title, body, type = "default") {
@@ -858,6 +910,67 @@ async function confirmDeleteBranch(row) {
   }
 }
 
+if (addBranchBtn) {
+  addBranchBtn.addEventListener("click", () => openBranchEditorCreate());
+}
+if (branchesExportBtn) {
+  branchesExportBtn.addEventListener("click", () => exportBranchesCsv());
+}
+if (branchesSearchInput) {
+  branchesSearchInput.addEventListener("input", () => {
+    if (branchesSearchTimer) clearTimeout(branchesSearchTimer);
+    branchesSearchTimer = setTimeout(() => applyBranchesFilter(), 200);
+  });
+}
+
+if (branchEditorCloseBtn) branchEditorCloseBtn.addEventListener("click", () => setBranchEditorOpen(false));
+if (branchEditorCancelBtn) branchEditorCancelBtn.addEventListener("click", () => setBranchEditorOpen(false));
+if (branchEditorBackdrop) branchEditorBackdrop.addEventListener("click", () => setBranchEditorOpen(false));
+
+if (branchEditorForm) {
+  branchEditorForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    setBranchEditorError("");
+    const name = branchEditorNameInput ? branchEditorNameInput.value.trim() : "";
+    if (!name) {
+      setBranchEditorError("Укажите название филиала.");
+      return;
+    }
+    const payload = {
+      name,
+      code: branchEditorCodeInput && branchEditorCodeInput.value.trim() ? branchEditorCodeInput.value.trim() : null,
+      city: (branchEditorCityInput && branchEditorCityInput.value.trim()) || null,
+      address: (branchEditorAddressInput && branchEditorAddressInput.value.trim()) || null,
+      phone: (branchEditorPhoneInput && branchEditorPhoneInput.value.trim()) || null,
+      email: (branchEditorEmailInput && branchEditorEmailInput.value.trim()) || null,
+      director_name: (branchEditorDirectorInput && branchEditorDirectorInput.value.trim()) || null,
+      work_hours: (branchEditorHoursInput && branchEditorHoursInput.value.trim()) || null,
+      notes: (branchEditorNotesInput && branchEditorNotesInput.value.trim()) || null,
+      sort_order: branchEditorSortInput ? Number(branchEditorSortInput.value) : 0,
+      is_active: !!(branchEditorActiveInput && branchEditorActiveInput.checked),
+    };
+    try {
+      if (branchEditorMode === "create") {
+        await window.desktopApi.createBranch(payload);
+        toast("Готово", "Филиал создан.");
+      } else {
+        const id = branchEditorIdInput ? branchEditorIdInput.value.trim() : "";
+        if (!id) throw new Error("Не указан ID");
+        await window.desktopApi.updateBranch(id, payload);
+        toast("Готово", "Филиал обновлён.");
+      }
+      setBranchEditorOpen(false);
+      resetBranchEditorForm();
+      await renderBranches();
+    } catch (err) {
+      const m = (err && err.message) ? err.message : "Ошибка сохранения";
+      setBranchEditorError(m);
+      toast("Ошибка", m, "danger");
+      if (err && err.status === 401) await showLogin("Сессия устарела. Выполните вход снова.");
+    }
+  });
+}
+
 async function renderUsers() {
   setHidden(usersError, true);
   showAlert(usersEmpty, "");
@@ -915,6 +1028,7 @@ function setUserEditorOpen(open) {
     const otherModalOpen =
       (createVariantPanel && !createVariantPanel.classList.contains("hidden")) ||
       (variantDetailPanel && !variantDetailPanel.classList.contains("hidden")) ||
+      (branchEditorPanel && !branchEditorPanel.classList.contains("hidden")) ||
       (settingsPanel && !settingsPanel.classList.contains("hidden"));
     document.body.style.overflow = otherModalOpen ? "hidden" : "";
   }
@@ -1154,6 +1268,33 @@ const VARIANT_DETAIL_ORDER = [
   "time",
 ];
 
+/** Допустимые значения как на бэкенде (`POST/PUT /api/properties`, тип «Квартира») */
+const APARTMENT_REPAIR_OPTIONS = ["ПСО", "С отделкой"];
+const APARTMENT_SERIES_OPTIONS = Array.from(
+  new Set([
+    "105 серия",
+    "106 серия",
+    "Индивидуалка",
+    "Элитка",
+    "103 серия",
+    "106 серия улучшенная",
+    "107 серия",
+    "108 серия",
+    "Малосемейка",
+    "Общежитие и Гостиничного типа",
+    "Сталинка",
+    "Хрущевка",
+  ])
+);
+const APARTMENT_ROOMS_OPTIONS = ["1", "2", "3", "4", "5+"];
+
+let apartmentReferenceSelectsFilled = false;
+let variantEditPropertyId = null;
+/** @type {string[]} */
+let variantEditPhotoKeys = [];
+/** Служебные поля для PUT (в форме нет отдельных инпутов) */
+let variantEditExtras = { unit: null, owner_id: null };
+
 function applyVariantsToolbarForRole() {
   const role = dashboardUser && dashboardUser.role;
   if (variantsModeAllBtn) {
@@ -1225,6 +1366,174 @@ function updateApartmentFieldsVisibility() {
   variantApartmentFields.classList.toggle("hidden", !show);
 }
 
+function fillApartmentReferenceSelects() {
+  if (!variantRepairInput || !variantSeriesInput || !variantRoomsInput) return;
+  const fill = (el, items, placeholder) => {
+    el.innerHTML = "";
+    const ph = document.createElement("option");
+    ph.value = "";
+    ph.textContent = placeholder;
+    el.appendChild(ph);
+    for (const x of items) {
+      const o = document.createElement("option");
+      o.value = x;
+      o.textContent = x;
+      el.appendChild(o);
+    }
+  };
+  fill(variantRepairInput, APARTMENT_REPAIR_OPTIONS, "Выберите ремонт");
+  fill(variantSeriesInput, APARTMENT_SERIES_OPTIONS, "Выберите серию");
+  fill(variantRoomsInput, APARTMENT_ROOMS_OPTIONS, "Выберите количество");
+}
+
+/** Из полного URL фото API — ключ файла в S3 (для existingPhotos при редактировании) */
+function photoUrlToS3Key(url) {
+  if (!url || typeof url !== "string") return "";
+  const s = url.trim();
+  if (!s) return "";
+  try {
+    const u = new URL(s);
+    const segs = u.pathname.split("/").filter(Boolean);
+    if (segs.length >= 2) {
+      return segs.slice(1).join("/");
+    }
+  } catch {
+    /* уже ключ */
+  }
+  if (!s.includes("://") && !s.startsWith("/")) return s;
+  return "";
+}
+
+function setSelectValueAllowUnknown(select, value) {
+  if (!select) return;
+  const v = value != null ? String(value).trim() : "";
+  if (!v) {
+    select.value = "";
+    return;
+  }
+  const exists = Array.from(select.options).some((o) => o.value === v);
+  if (!exists) {
+    const o = document.createElement("option");
+    o.value = v;
+    o.textContent = `${v} (в базе)`;
+    select.appendChild(o);
+  }
+  select.value = v;
+}
+
+function updateCreateVariantModalCopy() {
+  if (createVariantModalTitle) {
+    createVariantModalTitle.textContent = variantEditPropertyId
+      ? `Редактировать объект №${variantEditPropertyId}`
+      : "Добавить объект недвижимости";
+  }
+  if (createVariantModalSubtitle) {
+    createVariantModalSubtitle.textContent = variantEditPropertyId
+      ? "Измените поля и нажмите «Сохранить». Новые фото добавятся к текущим."
+      : "Тип, районы, ЖК и кураторы подгружаются с сервера";
+  }
+  if (createVariantBtn) {
+    createVariantBtn.textContent = variantEditPropertyId ? "Сохранить" : "Добавить";
+  }
+}
+
+function resetVariantEditorState() {
+  variantEditPropertyId = null;
+  variantEditPhotoKeys = [];
+  variantEditExtras = { unit: null, owner_id: null };
+  updateCreateVariantModalCopy();
+}
+
+async function openVariantEditForm(propertyId) {
+  const pid = Number(propertyId);
+  if (!Number.isFinite(pid)) return;
+  if (!createVariantPanel) return;
+  closeVariantDetailPanel();
+  setHidden(createVariantError, true);
+
+  let d;
+  try {
+    await loadCreateVariantReference();
+    d = await window.desktopApi.getVariantDetail(pid);
+  } catch (err) {
+    if (err && err.status === 401) {
+      toast("Сессия устарела", "Войдите снова.", "danger");
+      await showLogin("Сессия устарела. Выполните вход снова.");
+      return;
+    }
+    const msg = (err && err.message) ? err.message : "Не удалось загрузить объект";
+    toast("Ошибка", msg, "danger");
+    return;
+  }
+
+  variantEditPropertyId = pid;
+  variantEditPhotoKeys = (Array.isArray(d.photos) ? d.photos : [])
+    .map(photoUrlToS3Key)
+    .filter(Boolean);
+  variantEditExtras = {
+    unit: d.unit != null && d.unit !== undefined ? String(d.unit) : null,
+    owner_id: d.owner_id != null && d.owner_id !== undefined && String(d.owner_id).trim() !== ""
+      ? Number(d.owner_id)
+      : null,
+  };
+  if (variantEditExtras.owner_id != null && !Number.isFinite(variantEditExtras.owner_id)) {
+    variantEditExtras.owner_id = null;
+  }
+
+  const setNum = (input, val) => {
+    if (!input) return;
+    if (val === null || val === undefined || val === "") input.value = "";
+    else input.value = String(val);
+  };
+
+  if (variantTypeSelect) variantTypeSelect.value = d.type_id ? String(d.type_id) : "";
+  setNum(variantPriceInput, d.price);
+  setNum(variantRukPriceInput, d.rukprice);
+  setNum(variantMkvInput, d.mkv);
+  if (variantAddressInput) variantAddressInput.value = d.address ? String(d.address) : "";
+  setNum(variantEtajInput, d.etaj);
+  setNum(variantEtajnostInput, d.etajnost);
+
+  if (variantDistrictSelect) variantDistrictSelect.value = d.district_id != null ? String(d.district_id) : "";
+  if (d.district_id != null && String(d.district_id).trim() !== "") {
+    try {
+      await loadSubdistrictsForDistrict(String(d.district_id));
+    } catch {
+      /* сообщение уже показано */
+    }
+    if (variantSubdistrictSelect && d.subdistrict_id != null) {
+      variantSubdistrictSelect.value = String(d.subdistrict_id);
+    }
+  } else if (variantSubdistrictSelect) {
+    variantSubdistrictSelect.innerHTML = `<option value="">Сначала выберите район</option>`;
+    variantSubdistrictSelect.disabled = true;
+  }
+
+  if (variantJkSelect) variantJkSelect.value = d.zhk_id != null ? String(d.zhk_id) : "";
+  if (variantCuratorSelect && !variantCuratorSelect.disabled) {
+    variantCuratorSelect.value = d.curator_id != null ? String(d.curator_id) : "";
+  }
+
+  if (variantOwnerNameInput) variantOwnerNameInput.value = d.owner_name ? String(d.owner_name) : "";
+  if (variantOwnerPhoneInput) variantOwnerPhoneInput.value = d.owner_phone ? String(d.owner_phone) : "";
+  if (variantPhoneInput) variantPhoneInput.value = d.phone ? String(d.phone) : "";
+  if (variantStatusInput) variantStatusInput.value = d.status ? String(d.status) : "";
+  if (variantDescriptionInput) variantDescriptionInput.value = d.description ? String(d.description) : "";
+  if (variantNotesInput) variantNotesInput.value = d.notes ? String(d.notes) : "";
+
+  setSelectValueAllowUnknown(variantRepairInput, d.repair);
+  setSelectValueAllowUnknown(variantSeriesInput, d.series);
+  setSelectValueAllowUnknown(variantRoomsInput, d.rooms);
+
+  if (variantPhotosInput) variantPhotosInput.value = "";
+  if (variantDocumentInput) variantDocumentInput.value = "";
+
+  updateApartmentFieldsVisibility();
+  updatePricePerMkvHint();
+  updateCreateVariantModalCopy();
+  setCreatePanelOpen(true);
+}
+
 async function loadSubdistrictsForDistrict(districtId) {
   if (!variantSubdistrictSelect) return;
   const id = districtId ? String(districtId).trim() : "";
@@ -1251,6 +1560,10 @@ async function loadSubdistrictsForDistrict(districtId) {
 
 async function loadCreateVariantReference() {
   setHidden(createVariantError, true);
+  if (!apartmentReferenceSelectsFilled) {
+    fillApartmentReferenceSelects();
+    apartmentReferenceSelectsFilled = true;
+  }
   await loadVariantTypesSelect();
 
   const auth = await window.desktopApi.getAuth();
@@ -1340,6 +1653,9 @@ async function renderVariants() {
   variantsEmpty.classList.add("hidden");
   variantsTbody.innerHTML = "";
 
+  const isSuperAdmin = !!(dashboardUser && dashboardUser.role === "SUPER_ADMIN");
+  if (variantsActionsTh) variantsActionsTh.classList.toggle("hidden", !isSuperAdmin);
+
   const needClientFilterSuperAdminMine =
     !!(dashboardUser && dashboardUser.role === "SUPER_ADMIN" && variantsMode === "mine");
   const myId = needClientFilterSuperAdminMine ? Number(dashboardUser.id) : NaN;
@@ -1406,6 +1722,12 @@ async function renderVariants() {
       const districtText = row.district === null || row.district === undefined ? "—" : escapeHtml(row.district);
       const statusText = row.status === null || row.status === undefined ? "—" : escapeHtml(row.status);
 
+      const actionsCol = isSuperAdmin
+        ? `<td class="variants-actions-cell">
+            <button type="button" class="ghost-btn compact variant-row-edit" data-variant-id="${escapeHtml(row.id)}">Изменить</button>
+            <button type="button" class="danger-outline-btn compact variant-row-del" data-variant-id="${escapeHtml(row.id)}">Удалить</button>
+          </td>`
+        : "";
       tr.innerHTML = `
         <td>${escapeHtml(row.id)}</td>
         <td>${escapeHtml(row.date)}</td>
@@ -1414,10 +1736,48 @@ async function renderVariants() {
         <td>${areaText}</td>
         <td>${priceText}</td>
         <td>${statusText}</td>
+        ${actionsCol}
       `;
-      tr.addEventListener("click", () => {
+      tr.addEventListener("click", (ev) => {
+        if (ev.target.closest("button")) return;
         openVariantDetailPanel(row.id);
       });
+      if (isSuperAdmin) {
+        const editBtn = tr.querySelector(".variant-row-edit");
+        const delBtn = tr.querySelector(".variant-row-del");
+        if (editBtn) {
+          editBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            const vid = Number(editBtn.getAttribute("data-variant-id"));
+            if (Number.isFinite(vid)) openVariantEditForm(vid);
+          });
+        }
+        if (delBtn) {
+          delBtn.addEventListener("click", async (e) => {
+            e.stopPropagation();
+            const vid = Number(delBtn.getAttribute("data-variant-id"));
+            if (!Number.isFinite(vid)) return;
+            if (!confirm(`Удалить объект №${vid}? Это действие нельзя отменить.`)) return;
+            delBtn.disabled = true;
+            try {
+              await window.desktopApi.deleteProperty(vid);
+              toast("Готово", "Объект удалён.");
+              closeVariantDetailPanel();
+              await renderVariants();
+            } catch (err) {
+              if (err && err.status === 401) {
+                toast("Сессия устарела", "Войдите снова.", "danger");
+                await showLogin("Сессия устарела. Выполните вход снова.");
+                return;
+              }
+              const message = (err && err.message) ? err.message : "Не удалось удалить объект";
+              toast("Ошибка", message, "danger");
+            } finally {
+              delBtn.disabled = false;
+            }
+          });
+        }
+      }
       rowElById.set(Number(row.id), tr);
       variantsTbody.appendChild(tr);
     }
@@ -1658,6 +2018,7 @@ async function showLogin(message) {
   closeVariantDetailPanel();
   stopAutoRefresh();
   setUserEditorOpen(false);
+  setBranchEditorOpen(false);
   authInvalid = true;
 
   setHidden(dashboardView, true);
@@ -1670,6 +2031,13 @@ async function showLogin(message) {
   else showAlert(loginError, "");
 
   // Keep the baseUrl shown.
+  requestAnimationFrame(() => {
+    try {
+      if (emailInput) emailInput.focus();
+    } catch {
+      /* ignore */
+    }
+  });
 }
 
 async function bootstrap() {
@@ -1702,7 +2070,14 @@ async function bootstrap() {
 showPasswordBtn.addEventListener("click", () => {
   const isPassword = passwordInput.type === "password";
   passwordInput.type = isPassword ? "text" : "password";
-  showPasswordBtn.textContent = isPassword ? "Скрыть" : "Показать";
+  const reveal = isPassword;
+  const label = reveal ? "Скрыть" : "Показать";
+  const textEl = showPasswordBtn.querySelector(".login-pwd-toggle-text");
+  if (textEl) textEl.textContent = label;
+  else showPasswordBtn.textContent = label;
+  showPasswordBtn.setAttribute("aria-pressed", reveal ? "true" : "false");
+  showPasswordBtn.setAttribute("aria-label", reveal ? "Скрыть пароль" : "Показать пароль");
+  showPasswordBtn.title = reveal ? "Скрыть пароль" : "Показать пароль";
 });
 
 saveBaseUrlBtn.addEventListener("click", async () => {
@@ -1903,10 +2278,22 @@ logoutBtn.addEventListener("click", async () => {
   hideLoading();
 });
 
+if (toggleMaximizeBtn && window.desktopApi && window.desktopApi.windowToggleMaximized) {
+  toggleMaximizeBtn.addEventListener("click", () => {
+    window.desktopApi.windowToggleMaximized().catch(() => {});
+  });
+}
+if (toggleFullscreenBtn && window.desktopApi && window.desktopApi.windowToggleFullscreen) {
+  toggleFullscreenBtn.addEventListener("click", () => {
+    window.desktopApi.windowToggleFullscreen().catch(() => {});
+  });
+}
+
 refreshBtn.addEventListener("click", async () => {
   try {
     if (activeTab === "listings") await renderListings();
     if (activeTab === "raions") await renderRaions();
+    if (activeTab === "branches") await renderBranches();
     if (activeTab === "users") await renderUsers();
     if (activeTab === "types") {
       applyVariantsToolbarForRole();
@@ -1914,6 +2301,138 @@ refreshBtn.addEventListener("click", async () => {
     }
   } catch {}
 });
+
+async function refreshAppVersionLabels() {
+  let v = "—";
+  try {
+    if (window.desktopApi && window.desktopApi.getAppVersion) {
+      v = await window.desktopApi.getAppVersion();
+    }
+  } catch {
+    v = "?";
+  }
+  const label = `Версия ${v}`;
+  if (settingsAppVersionLabel) settingsAppVersionLabel.textContent = label;
+  if (settingsLocalVersion) settingsLocalVersion.textContent = v;
+}
+
+function resetSettingsUpdatePanel() {
+  lastUpdateDownloadUrl = "";
+  if (settingsUpdateBanner) {
+    settingsUpdateBanner.textContent = "";
+    settingsUpdateBanner.classList.remove("is-ok", "is-warn", "is-bad");
+    setHidden(settingsUpdateBanner, true);
+  }
+  setHidden(settingsUpdateLoading, true);
+  if (settingsUpdateResult) {
+    settingsUpdateResult.textContent = "";
+    setHidden(settingsUpdateResult, true);
+  }
+  if (settingsUpdateNotes) {
+    settingsUpdateNotes.innerHTML = "";
+    setHidden(settingsUpdateNotes, true);
+  }
+  setHidden(settingsOpenDownloadBtn, true);
+  setHidden(settingsRelaunchAppBtn, true);
+  if (settingsCheckUpdateBtn) settingsCheckUpdateBtn.disabled = false;
+  if (settingsServerVersion) settingsServerVersion.textContent = "—";
+}
+
+/**
+ * @param {{ silent?: boolean; showToast?: boolean }} [options]
+ */
+async function runDesktopUpdateCheck(options = {}) {
+  const silent = !!options.silent;
+  const showToast = options.showToast !== false;
+  if (!window.desktopApi || !window.desktopApi.fetchDesktopUpdateInfo) return;
+
+  if (!silent) resetSettingsUpdatePanel();
+  setHidden(settingsUpdateLoading, false);
+  if (settingsCheckUpdateBtn) settingsCheckUpdateBtn.disabled = true;
+
+  try {
+    await refreshAppVersionLabels();
+    const localV =
+      settingsLocalVersion && settingsLocalVersion.textContent
+        ? settingsLocalVersion.textContent.trim()
+        : "0";
+
+    const res = await window.desktopApi.fetchDesktopUpdateInfo();
+    setHidden(settingsUpdateLoading, true);
+    if (settingsCheckUpdateBtn) settingsCheckUpdateBtn.disabled = false;
+
+    if (!res || !res.ok) {
+      if (settingsServerVersion) settingsServerVersion.textContent = "—";
+      const errText = (res && res.error) ? res.error : "Неизвестная ошибка";
+      if (settingsUpdateBanner) {
+        settingsUpdateBanner.textContent = `Не удалось получить данные об обновлениях: ${errText}`;
+        settingsUpdateBanner.classList.remove("is-ok", "is-warn");
+        settingsUpdateBanner.classList.add("is-bad");
+        setHidden(settingsUpdateBanner, false);
+      }
+      if (!silent && showToast) toast("Обновления", errText, "danger");
+      return;
+    }
+
+    const d = res.data || {};
+    const latest = String(d.latestVersion != null ? d.latestVersion : "").trim() || "0";
+    if (settingsServerVersion) settingsServerVersion.textContent = latest;
+
+    lastUpdateDownloadUrl = String(d.downloadUrl || "").trim();
+
+    const notes = Array.isArray(d.releaseNotes) ? d.releaseNotes : [];
+    const cmp = compareSemver(latest, localV);
+
+    if (settingsUpdateBanner) {
+      settingsUpdateBanner.classList.remove("is-ok", "is-warn", "is-bad");
+    }
+
+    if (cmp > 0) {
+      if (settingsUpdateBanner) {
+        settingsUpdateBanner.textContent =
+          `Доступна новая версия ${latest} (у вас ${localV}). Установите сборку с сайта и перезапустите приложение.`;
+        settingsUpdateBanner.classList.add("is-warn");
+        setHidden(settingsUpdateBanner, false);
+      }
+      if (settingsUpdateResult) {
+        setHidden(settingsUpdateResult, false);
+        settingsUpdateResult.innerHTML = `<strong>Рекомендуется обновление.</strong> После установки нажмите «Перезапустить приложение» или закройте Kurut Desktop и откройте снова.`;
+      }
+      if (notes.length && settingsUpdateNotes) {
+        settingsUpdateNotes.innerHTML = notes.map((n) => `<li>${escapeHtml(n)}</li>`).join("");
+        setHidden(settingsUpdateNotes, false);
+      }
+      if (lastUpdateDownloadUrl) setHidden(settingsOpenDownloadBtn, false);
+      setHidden(settingsRelaunchAppBtn, false);
+      if (!silent && showToast) toast("Обновление", `Доступна версия ${latest}`, "default");
+    } else {
+      if (d.message && settingsUpdateBanner) {
+        settingsUpdateBanner.textContent = String(d.message);
+        settingsUpdateBanner.classList.add("is-ok");
+        setHidden(settingsUpdateBanner, false);
+      }
+      if (settingsUpdateResult) {
+        setHidden(settingsUpdateResult, false);
+        settingsUpdateResult.textContent =
+          cmp === 0
+            ? "У вас актуальная версия относительно данных на сервере."
+            : "Версия клиента новее, чем указано на сервере — всё в порядке.";
+      }
+      if (notes.length && settingsUpdateNotes) {
+        settingsUpdateNotes.innerHTML = notes.map((n) => `<li>${escapeHtml(n)}</li>`).join("");
+        setHidden(settingsUpdateNotes, false);
+      }
+      if (!silent && showToast) {
+        toast("Обновления", cmp === 0 ? "Актуальная версия." : "Клиент новее записи на сервере.", "default");
+      }
+    }
+  } catch (err) {
+    setHidden(settingsUpdateLoading, true);
+    if (settingsCheckUpdateBtn) settingsCheckUpdateBtn.disabled = false;
+    const msg = (err && err.message) ? err.message : "Ошибка проверки";
+    if (!silent && showToast) toast("Обновления", msg, "danger");
+  }
+}
 
 async function refreshSettingsPanel() {
   if (!window.desktopApi || !window.desktopApi.getSettings) return;
@@ -1946,11 +2465,18 @@ function setSettingsOpen(open) {
   if (open) {
     document.body.style.overflow = "hidden";
     void refreshSettingsPanel();
+    resetSettingsUpdatePanel();
+    void refreshAppVersionLabels();
+    void runDesktopUpdateCheck({ silent: true, showToast: false });
+    document.querySelectorAll(".settings-rail-btn").forEach((b, i) => {
+      b.classList.toggle("active", i === 0);
+    });
   } else {
     const otherModalOpen =
       (createVariantPanel && !createVariantPanel.classList.contains("hidden")) ||
       (variantDetailPanel && !variantDetailPanel.classList.contains("hidden")) ||
-      (userEditorPanel && !userEditorPanel.classList.contains("hidden"));
+      (userEditorPanel && !userEditorPanel.classList.contains("hidden")) ||
+      (branchEditorPanel && !branchEditorPanel.classList.contains("hidden"));
     document.body.style.overflow = otherModalOpen ? "hidden" : "";
   }
 }
@@ -1963,6 +2489,42 @@ if (settingsBackdrop) {
 }
 if (settingsCloseBtn) {
   settingsCloseBtn.addEventListener("click", () => setSettingsOpen(false));
+}
+
+document.querySelectorAll(".settings-rail-btn[data-settings-jump]").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const id = btn.getAttribute("data-settings-jump");
+    const target = id ? document.getElementById(id) : null;
+    document.querySelectorAll(".settings-rail-btn").forEach((b) => {
+      b.classList.toggle("active", b === btn);
+    });
+    if (target) {
+      target.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  });
+});
+
+if (settingsCheckUpdateBtn) {
+  settingsCheckUpdateBtn.addEventListener("click", () => {
+    void runDesktopUpdateCheck({ silent: false, showToast: true });
+  });
+}
+if (settingsOpenDownloadBtn) {
+  settingsOpenDownloadBtn.addEventListener("click", async () => {
+    if (!lastUpdateDownloadUrl) return;
+    try {
+      await window.desktopApi.openExternalUrl(lastUpdateDownloadUrl);
+    } catch (err) {
+      toast("Ссылка", (err && err.message) ? err.message : "Не удалось открыть браузер", "danger");
+    }
+  });
+}
+if (settingsRelaunchAppBtn) {
+  settingsRelaunchAppBtn.addEventListener("click", () => {
+    window.desktopApi.relaunchApp().catch(() => {
+      toast("Перезапуск", "Закройте Kurut Desktop и откройте снова вручную.", "default");
+    });
+  });
 }
 
 function setThemeModeAndPersist(nextMode) {
@@ -2155,6 +2717,7 @@ if (settingsRefreshNowBtn) {
     try {
       if (activeTab === "listings") await renderListings();
       if (activeTab === "raions") await renderRaions();
+      if (activeTab === "branches") await renderBranches();
       if (activeTab === "users") await renderUsers();
       if (activeTab === "types") {
         applyVariantsToolbarForRole();
@@ -2205,6 +2768,13 @@ navRaionsBtn.addEventListener("click", async () => {
   await renderRaions();
 });
 
+if (navBranchesBtn) {
+  navBranchesBtn.addEventListener("click", async () => {
+    setActiveView("branches");
+    await renderBranches();
+  });
+}
+
 navUsersBtn.addEventListener("click", async () => {
   setActiveView("users");
   await renderUsers();
@@ -2219,6 +2789,7 @@ navTypesBtn.addEventListener("click", async () => {
 // Variants controls (filter + create)
 function setCreatePanelOpen(open) {
   if (!createVariantPanel) return;
+  const wasOpen = !createVariantPanel.classList.contains("hidden");
   createVariantPanel.classList.toggle("hidden", !open);
   if (open) {
     document.body.style.overflow = "hidden";
@@ -2227,6 +2798,14 @@ function setCreatePanelOpen(open) {
     }, 0);
   } else {
     document.body.style.overflow = "";
+    if (wasOpen) {
+      resetVariantEditorState();
+      if (createVariantForm) createVariantForm.reset();
+      if (variantPhotosInput) variantPhotosInput.value = "";
+      if (variantDocumentInput) variantDocumentInput.value = "";
+      updateApartmentFieldsVisibility();
+      updatePricePerMkvHint();
+    }
   }
 }
 
@@ -2268,15 +2847,19 @@ if (toggleCreateVariantBtn) {
   toggleCreateVariantBtn.addEventListener("click", async () => {
     if (!createVariantPanel) return;
     const isOpen = !createVariantPanel.classList.contains("hidden");
-    setCreatePanelOpen(!isOpen);
-    setHidden(createVariantError, true);
     if (!isOpen) {
+      resetVariantEditorState();
+      setHidden(createVariantError, true);
       try {
         await loadCreateVariantReference();
+        setCreatePanelOpen(true);
       } catch {
         // 401 и др. уже обработаны
       }
+      return;
     }
+    setCreatePanelOpen(false);
+    setHidden(createVariantError, true);
   });
 }
 
@@ -2301,7 +2884,6 @@ if (variantMkvInput) variantMkvInput.addEventListener("input", updatePricePerMkv
 if (cancelCreateVariantBtn) {
   cancelCreateVariantBtn.addEventListener("click", () => {
     setCreatePanelOpen(false);
-    if (createVariantForm) createVariantForm.reset();
     setHidden(createVariantError, true);
   });
 }
@@ -2309,7 +2891,6 @@ if (cancelCreateVariantBtn) {
 if (cancelCreateVariantBtn2) {
   cancelCreateVariantBtn2.addEventListener("click", () => {
     setCreatePanelOpen(false);
-    if (createVariantForm) createVariantForm.reset();
     setHidden(createVariantError, true);
   });
 }
@@ -2317,7 +2898,6 @@ if (cancelCreateVariantBtn2) {
 if (createVariantBackdrop) {
   createVariantBackdrop.addEventListener("click", () => {
     setCreatePanelOpen(false);
-    if (createVariantForm) createVariantForm.reset();
     setHidden(createVariantError, true);
   });
 }
@@ -2353,8 +2933,11 @@ document.addEventListener("keydown", (e) => {
     }
     if (createVariantPanel && !createVariantPanel.classList.contains("hidden")) {
       setCreatePanelOpen(false);
-      if (createVariantForm) createVariantForm.reset();
       setHidden(createVariantError, true);
+    }
+    if (branchEditorPanel && !branchEditorPanel.classList.contains("hidden")) {
+      setBranchEditorOpen(false);
+      return;
     }
     if (userEditorPanel && !userEditorPanel.classList.contains("hidden")) {
       setUserEditorOpen(false);
@@ -2376,8 +2959,6 @@ document.addEventListener("keydown", (e) => {
     }
   }
 });
-
-const createVariantBtn = $("createVariantBtn");
 
 if (createVariantForm) {
   createVariantForm.addEventListener("submit", async (e) => {
@@ -2454,33 +3035,44 @@ if (createVariantForm) {
       const files = variantPhotosInput && variantPhotosInput.files ? Array.from(variantPhotosInput.files) : [];
       const docFile = variantDocumentInput && variantDocumentInput.files ? variantDocumentInput.files[0] : null;
 
-      if (files.length === 0 && !docFile) {
-        await window.desktopApi.createVariant(payload);
-      } else {
-        // Convert files to base64 for multipart upload via Electron main process.
-        const photos = [];
-        for (const f of files) {
-          const base64 = await fileToBase64(f);
-          if (!base64) continue;
-          photos.push({ base64, filename: f.name || "photo", mime: f.type || "application/octet-stream" });
-        }
-
-        let document = null;
-        if (docFile) {
-          const base64 = await fileToBase64(docFile);
-          if (base64) {
-            document = { base64, filename: docFile.name || "document", mime: docFile.type || "application/octet-stream" };
-          }
-        }
-
-        await window.desktopApi.createPropertyWithFiles(payload, photos, document);
+      const photos = [];
+      for (const f of files) {
+        const base64 = await fileToBase64(f);
+        if (!base64) continue;
+        photos.push({ base64, filename: f.name || "photo", mime: f.type || "application/octet-stream" });
       }
 
-      toast("Готово", "Объект добавлен.");
+      let document = null;
+      if (docFile) {
+        const base64 = await fileToBase64(docFile);
+        if (base64) {
+          document = { base64, filename: docFile.name || "document", mime: docFile.type || "application/octet-stream" };
+        }
+      }
+
+      const editingId = variantEditPropertyId;
+
+      if (editingId) {
+        if (variantEditExtras.unit != null && String(variantEditExtras.unit).trim() !== "") {
+          payload.unit = String(variantEditExtras.unit).trim();
+        }
+        if (variantEditExtras.owner_id != null && Number.isFinite(variantEditExtras.owner_id)) {
+          payload.owner_id = String(variantEditExtras.owner_id);
+        }
+        if (variantEditPhotoKeys.length > 0) {
+          payload.existingPhotos = JSON.stringify(variantEditPhotoKeys);
+        }
+        await window.desktopApi.updatePropertyWithFiles(editingId, payload, photos, document);
+        toast("Готово", "Объект обновлён.");
+      } else if (files.length === 0 && !docFile) {
+        await window.desktopApi.createVariant(payload);
+        toast("Готово", "Объект добавлен.");
+      } else {
+        await window.desktopApi.createPropertyWithFiles(payload, photos, document);
+        toast("Готово", "Объект добавлен.");
+      }
+
       setCreatePanelOpen(false);
-      createVariantForm.reset();
-      if (variantPhotosInput) variantPhotosInput.value = "";
-      if (variantDocumentInput) variantDocumentInput.value = "";
       await renderVariants();
     } catch (err) {
       if (err && err.status === 401) {
@@ -2488,7 +3080,7 @@ if (createVariantForm) {
         await showLogin("Сессия устарела. Выполните вход снова.");
         return;
       }
-      const message = (err && err.message) ? err.message : "Ошибка создания варианта";
+      const message = (err && err.message) ? err.message : (variantEditPropertyId ? "Ошибка сохранения объекта" : "Ошибка создания варианта");
       createVariantError.textContent = message;
       setHidden(createVariantError, false);
       toast("Ошибка", message, "danger");
