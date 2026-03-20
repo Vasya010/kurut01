@@ -307,6 +307,30 @@ async function testDatabaseConnection() {
       `);
     }
 
+    // Филиалы (офисы сети)
+    const [branchTables] = await connection.execute("SHOW TABLES LIKE 'branches'");
+    if (branchTables.length === 0) {
+      console.log("Creating branches table...");
+      await connection.execute(`
+        CREATE TABLE branches (
+          id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+          name VARCHAR(255) NOT NULL,
+          code VARCHAR(32) DEFAULT NULL,
+          city VARCHAR(128) DEFAULT NULL,
+          address VARCHAR(512) DEFAULT NULL,
+          phone VARCHAR(64) DEFAULT NULL,
+          email VARCHAR(255) DEFAULT NULL,
+          director_name VARCHAR(255) DEFAULT NULL,
+          work_hours VARCHAR(255) DEFAULT NULL,
+          notes TEXT DEFAULT NULL,
+          sort_order INT NOT NULL DEFAULT 0,
+          is_active TINYINT(1) NOT NULL DEFAULT 1,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE KEY uk_branch_code (code)
+        ) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci
+      `);
+    }
+
     // Setup admin user
     const adminEmail = process.env.ADMIN_EMAIL || "admin@example.com";
     const adminPassword = process.env.ADMIN_PASSWORD || "admin123";
@@ -775,6 +799,165 @@ app.delete("/api/jk/:id", authenticate, async (req, res) => {
       message: error.message,
       stack: error.stack
     });
+    res.status(500).json({ error: `Внутренняя ошибка сервера: ${error.message}` });
+  } finally {
+    if (connection) connection.release();
+  }
+});
+
+// ——— Филиалы (branches) ———
+app.get("/api/branches", authenticate, async (req, res) => {
+  let connection;
+  try {
+    connection = await pool.getConnection();
+    const [rows] = await connection.execute(
+      `SELECT id, name, code, city, address, phone, email, director_name, work_hours, notes, sort_order, is_active, created_at
+       FROM branches
+       ORDER BY sort_order ASC, name ASC, id ASC`
+    );
+    res.json(rows);
+  } catch (error) {
+    console.error("Error retrieving branches:", { message: error.message, stack: error.stack });
+    res.status(500).json({ error: `Внутренняя ошибка сервера: ${error.message}` });
+  } finally {
+    if (connection) connection.release();
+  }
+});
+
+app.post("/api/branches", authenticate, async (req, res) => {
+  if (!["SUPER_ADMIN", "ADMIN"].includes(req.user.role)) {
+    return res.status(403).json({ error: "Доступ запрещён: требуется роль SUPER_ADMIN или ADMIN" });
+  }
+
+  const b = req.body || {};
+  const name = b.name != null ? String(b.name).trim() : "";
+  if (!name) {
+    return res.status(400).json({ error: "Название филиала обязательно" });
+  }
+
+  const code = b.code != null && String(b.code).trim() !== "" ? String(b.code).trim() : null;
+  const city = b.city != null ? String(b.city).trim() || null : null;
+  const address = b.address != null ? String(b.address).trim() || null : null;
+  const phone = b.phone != null ? String(b.phone).trim() || null : null;
+  const email = b.email != null ? String(b.email).trim() || null : null;
+  const director_name = b.director_name != null ? String(b.director_name).trim() || null : null;
+  const work_hours = b.work_hours != null ? String(b.work_hours).trim() || null : null;
+  const notes = b.notes != null ? String(b.notes).trim() || null : null;
+  const sort_order = Number.parseInt(String(b.sort_order ?? 0), 10);
+  const is_active = b.is_active === false || b.is_active === 0 || b.is_active === "0" ? 0 : 1;
+
+  let connection;
+  try {
+    connection = await pool.getConnection();
+    if (code) {
+      const [dup] = await connection.execute("SELECT id FROM branches WHERE code = ?", [code]);
+      if (dup.length > 0) {
+        return res.status(400).json({ error: "Код филиала уже занят" });
+      }
+    }
+
+    const [result] = await connection.execute(
+      `INSERT INTO branches (name, code, city, address, phone, email, director_name, work_hours, notes, sort_order, is_active)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [name, code, city, address, phone, email, director_name, work_hours, notes, Number.isFinite(sort_order) ? sort_order : 0, is_active]
+    );
+
+    const [rows] = await connection.execute("SELECT * FROM branches WHERE id = ?", [result.insertId]);
+    res.status(201).json(rows[0]);
+  } catch (error) {
+    console.error("Error creating branch:", { message: error.message, stack: error.stack });
+    if (error.code === "ER_DUP_ENTRY") {
+      return res.status(400).json({ error: "Дубликат кода или названия" });
+    }
+    res.status(500).json({ error: `Внутренняя ошибка сервера: ${error.message}` });
+  } finally {
+    if (connection) connection.release();
+  }
+});
+
+app.put("/api/branches/:id", authenticate, async (req, res) => {
+  if (!["SUPER_ADMIN", "ADMIN"].includes(req.user.role)) {
+    return res.status(403).json({ error: "Доступ запрещён: требуется роль SUPER_ADMIN или ADMIN" });
+  }
+
+  const id = parseInt(String(req.params.id), 10);
+  if (!Number.isFinite(id)) {
+    return res.status(400).json({ error: "Некорректный ID" });
+  }
+
+  const b = req.body || {};
+  const name = b.name != null ? String(b.name).trim() : "";
+  if (!name) {
+    return res.status(400).json({ error: "Название филиала обязательно" });
+  }
+
+  const code = b.code != null && String(b.code).trim() !== "" ? String(b.code).trim() : null;
+  const city = b.city != null ? String(b.city).trim() || null : null;
+  const address = b.address != null ? String(b.address).trim() || null : null;
+  const phone = b.phone != null ? String(b.phone).trim() || null : null;
+  const email = b.email != null ? String(b.email).trim() || null : null;
+  const director_name = b.director_name != null ? String(b.director_name).trim() || null : null;
+  const work_hours = b.work_hours != null ? String(b.work_hours).trim() || null : null;
+  const notes = b.notes != null ? String(b.notes).trim() || null : null;
+  const sort_order = Number.parseInt(String(b.sort_order ?? 0), 10);
+  const is_active = b.is_active === false || b.is_active === 0 || b.is_active === "0" ? 0 : 1;
+
+  let connection;
+  try {
+    connection = await pool.getConnection();
+    const [ex] = await connection.execute("SELECT id FROM branches WHERE id = ?", [id]);
+    if (ex.length === 0) {
+      return res.status(404).json({ error: "Филиал не найден" });
+    }
+
+    if (code) {
+      const [dup] = await connection.execute("SELECT id FROM branches WHERE code = ? AND id != ?", [code, id]);
+      if (dup.length > 0) {
+        return res.status(400).json({ error: "Код филиала уже занят" });
+      }
+    }
+
+    await connection.execute(
+      `UPDATE branches SET name=?, code=?, city=?, address=?, phone=?, email=?, director_name=?, work_hours=?, notes=?, sort_order=?, is_active=?
+       WHERE id=?`,
+      [name, code, city, address, phone, email, director_name, work_hours, notes, Number.isFinite(sort_order) ? sort_order : 0, is_active, id]
+    );
+
+    const [rows] = await connection.execute("SELECT * FROM branches WHERE id = ?", [id]);
+    res.json(rows[0]);
+  } catch (error) {
+    console.error("Error updating branch:", { message: error.message, stack: error.stack });
+    if (error.code === "ER_DUP_ENTRY") {
+      return res.status(400).json({ error: "Дубликат кода" });
+    }
+    res.status(500).json({ error: `Внутренняя ошибка сервера: ${error.message}` });
+  } finally {
+    if (connection) connection.release();
+  }
+});
+
+app.delete("/api/branches/:id", authenticate, async (req, res) => {
+  if (req.user.role !== "SUPER_ADMIN") {
+    return res.status(403).json({ error: "Удаление филиалов доступно только SUPER_ADMIN" });
+  }
+
+  const id = parseInt(String(req.params.id), 10);
+  if (!Number.isFinite(id)) {
+    return res.status(400).json({ error: "Некорректный ID" });
+  }
+
+  let connection;
+  try {
+    connection = await pool.getConnection();
+    const [ex] = await connection.execute("SELECT id FROM branches WHERE id = ?", [id]);
+    if (ex.length === 0) {
+      return res.status(404).json({ error: "Филиал не найден" });
+    }
+
+    await connection.execute("DELETE FROM branches WHERE id = ?", [id]);
+    res.json({ message: "Филиал удалён" });
+  } catch (error) {
+    console.error("Error deleting branch:", { message: error.message, stack: error.stack });
     res.status(500).json({ error: `Внутренняя ошибка сервера: ${error.message}` });
   } finally {
     if (connection) connection.release();

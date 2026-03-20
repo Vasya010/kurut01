@@ -3,14 +3,55 @@
   "version": "1.0.0",
   "private": true,
   "main": "main.js",
+  "author": "Василий К",
+  "description": "Kurut Desktop — Windows 10/11, только x64",
   "scripts": {
-    "start": "electron ."
+    "start": "electron .",
+    "dist": "electron-builder --win --x64",
+    "dist:dir": "electron-builder --win --x64 --dir"
   },
   "dependencies": {
     "electron-store": "^9.0.0"
   },
   "devDependencies": {
-    "electron": "^30.0.0"
+    "electron": "^30.0.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.kurut.desktop",
+    "productName": "Kurut Desktop",
+    "copyright": "Copyright © Kurut",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer/**/*"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "${productName}-${version}-win-x64.${ext}",
+      "legalTrademarks": "Kurut Desktop"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerLanguages": [
+        "Russian",
+        "English"
+      ],
+      "language": "1049",
+      "shortcutName": "Kurut Desktop",
+      "uninstallDisplayName": "Kurut Desktop"
+    }
   }
 }
-

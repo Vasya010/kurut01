@@ -1,5 +1,16 @@
-const { app, BrowserWindow, ipcMain } = require("electron");
+const { app, BrowserWindow, ipcMain, dialog } = require("electron");
 const path = require("path");
+const os = require("os");
+
+/** Windows 11+ (build ≥ 22000): Mica; Win10: Acrylic; иначе без эффекта */
+function winBackgroundMaterial() {
+  if (process.platform !== "win32") return undefined;
+  const parts = String(os.release() || "").split(".");
+  const build = parseInt(parts[2] || "0", 10);
+  if (build >= 22000) return "mica";
+  if (build >= 10240) return "acrylic";
+  return undefined;
+}
 
 const DEFAULT_BASE_URL = "https://vasya010-kurut01-710e.twc1.net";
 
@@ -82,10 +93,17 @@ ipcMain.handle("get-settings", async () => {
     loadingOverlayEnabled: store.get("loadingOverlayEnabled") !== false,
     autoOpenLastTab: store.get("autoOpenLastTab") !== false,
     lastTab: (store.get("lastTab") || "listings").toString(),
+    uiScale: (store.get("uiScale") || "comfortable").toString(),
+    sidebarCompact: !!store.get("sidebarCompact"),
+    glassStyle: (store.get("glassStyle") || "balanced").toString(),
+    uiDensity: (store.get("uiDensity") || "comfortable").toString(),
+    toastEnabled: store.get("toastEnabled") !== false,
+    toastDurationSec: Number(store.get("toastDurationSec") ?? 3),
+    defaultStartTab: (store.get("defaultStartTab") || "listings").toString(),
   };
 });
 
-ipcMain.handle("set-settings", async (_event, { baseUrl, themeMode, autoRefreshEnabled, autoRefreshIntervalSec, rememberEmail, lastEmail, animationsEnabled, loadingOverlayEnabled, autoOpenLastTab, lastTab } = {}) => {
+ipcMain.handle("set-settings", async (_event, { baseUrl, themeMode, autoRefreshEnabled, autoRefreshIntervalSec, rememberEmail, lastEmail, animationsEnabled, loadingOverlayEnabled, autoOpenLastTab, lastTab, uiScale, sidebarCompact, glassStyle, uiDensity, toastEnabled, toastDurationSec, defaultStartTab } = {}) => {
   const s = await ensureStore();
 
   let cleanedBaseUrl = await getBaseUrl();
@@ -137,8 +155,49 @@ ipcMain.handle("set-settings", async (_event, { baseUrl, themeMode, autoRefreshE
   if (lastTab !== undefined && lastTab !== null) {
     const v = String(lastTab).trim();
     // allowed tabs
-    const allowed = ["listings", "raions", "users", "types"];
+    const allowed = ["listings", "raions", "users", "types", "branches"];
     s.set("lastTab", allowed.includes(v) ? v : "listings");
+  }
+
+  if (uiScale !== undefined) {
+    const allowed = ["compact", "comfortable", "large"];
+    const next = uiScale.toString().trim().toLowerCase();
+    if (!allowed.includes(next)) throw new Error("uiScale must be 'compact', 'comfortable' or 'large'");
+    s.set("uiScale", next);
+  }
+
+  if (typeof sidebarCompact === "boolean") {
+    s.set("sidebarCompact", sidebarCompact);
+  }
+
+  if (glassStyle !== undefined) {
+    const allowed = ["subtle", "balanced", "rich"];
+    const next = glassStyle.toString().trim().toLowerCase();
+    if (!allowed.includes(next)) throw new Error("glassStyle must be 'subtle', 'balanced' or 'rich'");
+    s.set("glassStyle", next);
+  }
+
+  if (uiDensity !== undefined) {
+    const allowed = ["comfortable", "compact"];
+    const next = uiDensity.toString().trim().toLowerCase();
+    if (!allowed.includes(next)) throw new Error("uiDensity must be 'comfortable' or 'compact'");
+    s.set("uiDensity", next);
+  }
+
+  if (typeof toastEnabled === "boolean") {
+    s.set("toastEnabled", toastEnabled);
+  }
+
+  if (toastDurationSec !== undefined) {
+    const n = Number(toastDurationSec);
+    if (!Number.isFinite(n) || n < 2 || n > 12) throw new Error("toastDurationSec must be 2..12");
+    s.set("toastDurationSec", n);
+  }
+
+  if (defaultStartTab !== undefined && defaultStartTab !== null) {
+    const v = String(defaultStartTab).trim();
+    const allowed = ["listings", "raions", "users", "types", "branches"];
+    s.set("defaultStartTab", allowed.includes(v) ? v : "listings");
   }
 
   return {
@@ -152,6 +211,13 @@ ipcMain.handle("set-settings", async (_event, { baseUrl, themeMode, autoRefreshE
     loadingOverlayEnabled: s.get("loadingOverlayEnabled") !== false,
     autoOpenLastTab: s.get("autoOpenLastTab") !== false,
     lastTab: (s.get("lastTab") || "listings").toString(),
+    uiScale: (s.get("uiScale") || "comfortable").toString(),
+    sidebarCompact: !!s.get("sidebarCompact"),
+    glassStyle: (s.get("glassStyle") || "balanced").toString(),
+    uiDensity: (s.get("uiDensity") || "comfortable").toString(),
+    toastEnabled: s.get("toastEnabled") !== false,
+    toastDurationSec: Number(s.get("toastDurationSec") ?? 3),
+    defaultStartTab: (s.get("defaultStartTab") || "listings").toString(),
   };
 });
 
@@ -260,6 +326,79 @@ ipcMain.handle("get-users", async () => {
   try {
     const users = await apiFetch("/api/users", { method: "GET", token });
     return users || [];
+  } catch (err) {
+    if (err && err.status === 401) {
+      const s = store;
+      if (s) {
+        s.delete("token");
+        s.delete("user");
+      }
+    }
+    throw err;
+  }
+});
+
+ipcMain.handle("get-branches", async () => {
+  const token = await getToken();
+  if (!token) throw new Error("Не авторизован");
+  try {
+    const rows = await apiFetch("/api/branches", { method: "GET", token });
+    return Array.isArray(rows) ? rows : [];
+  } catch (err) {
+    if (err && err.status === 401) {
+      const s = store;
+      if (s) {
+        s.delete("token");
+        s.delete("user");
+      }
+    }
+    throw err;
+  }
+});
+
+ipcMain.handle("create-branch", async (_event, payload = {}) => {
+  const token = await getToken();
+  if (!token) throw new Error("Не авторизован");
+  try {
+    return await apiFetch("/api/branches", { method: "POST", token, body: payload });
+  } catch (err) {
+    if (err && err.status === 401) {
+      const s = store;
+      if (s) {
+        s.delete("token");
+        s.delete("user");
+      }
+    }
+    throw err;
+  }
+});
+
+ipcMain.handle("update-branch", async (_event, { id, payload } = {}) => {
+  const token = await getToken();
+  if (!token) throw new Error("Не авторизован");
+  const sid = id !== undefined && id !== null ? String(id).trim() : "";
+  if (!sid) throw new Error("ID филиала обязателен");
+  try {
+    return await apiFetch(`/api/branches/${encodeURIComponent(sid)}`, { method: "PUT", token, body: payload || {} });
+  } catch (err) {
+    if (err && err.status === 401) {
+      const s = store;
+      if (s) {
+        s.delete("token");
+        s.delete("user");
+      }
+    }
+    throw err;
+  }
+});
+
+ipcMain.handle("delete-branch", async (_event, { id } = {}) => {
+  const token = await getToken();
+  if (!token) throw new Error("Не авторизован");
+  const sid = id !== undefined && id !== null ? String(id).trim() : "";
+  if (!sid) throw new Error("ID филиала обязателен");
+  try {
+    return await apiFetch(`/api/branches/${encodeURIComponent(sid)}`, { method: "DELETE", token });
   } catch (err) {
     if (err && err.status === 401) {
       const s = store;
@@ -621,17 +760,21 @@ ipcMain.handle("update-user", async (_event, { id, payload } = {}) => {
 });
 
 function createWindow() {
+  const material = winBackgroundMaterial();
   const win = new BrowserWindow({
-    width: 1180,
-    height: 740,
-    minWidth: 980,
+    title: "Kurut Desktop",
+    width: 1220,
+    height: 760,
+    minWidth: 1000,
     minHeight: 640,
     show: false,
     backgroundColor: "#0b1220",
+    ...(material ? { backgroundMaterial: material } : {}),
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
+      spellcheck: true,
     },
   });
 
@@ -640,6 +783,15 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  if (process.platform === "win32" && process.arch !== "x64") {
+    dialog.showErrorBox(
+      "Kurut Desktop",
+      "Эта сборка рассчитана на Windows 64-bit (x64).\nСкачайте установщик с пометкой win-x64."
+    );
+    app.quit();
+    return;
+  }
+
   createWindow();
 
   app.on("activate", () => {

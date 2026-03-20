@@ -43,6 +43,31 @@ const autoOpenLastTabInput = $("autoOpenLastTab");
 const settingsLogoutBtn = $("settingsLogoutBtn");
 const clearSavedEmailBtn = $("clearSavedEmailBtn");
 
+const settingsBaseUrlInput = $("settingsBaseUrl");
+const settingsSaveBaseUrlBtn = $("settingsSaveBaseUrlBtn");
+const settingsTestBaseUrlBtn = $("settingsTestBaseUrlBtn");
+const settingsCopyBaseUrlBtn = $("settingsCopyBaseUrlBtn");
+const settingsConnectionStatusEl = $("settingsConnectionStatus");
+const settingsRefreshNowBtn = $("settingsRefreshNowBtn");
+
+const uiScaleCompactBtn = $("uiScaleCompact");
+const uiScaleComfortableBtn = $("uiScaleComfortable");
+const uiScaleLargeBtn = $("uiScaleLarge");
+
+const glassStyleSubtleBtn = $("glassStyleSubtle");
+const glassStyleBalancedBtn = $("glassStyleBalanced");
+const glassStyleRichBtn = $("glassStyleRich");
+
+const sidebarCompactInput = $("sidebarCompactInput");
+const uiDensityCompactInput = $("uiDensityCompactInput");
+
+const defaultStartTabSelect = $("defaultStartTabSelect");
+
+const toastEnabledInput = $("toastEnabledInput");
+const toastDurationSecSelect = $("toastDurationSecSelect");
+
+const settingsRememberEmailInput = $("settingsRememberEmail");
+
 const userNameEl = $("userName");
 const userRoleEl = $("userRole");
 const userAvatarEl = $("userAvatar");
@@ -168,15 +193,52 @@ function hideLoading() {
   loadingOverlay.classList.add("hidden");
 }
 
+const APP_ALLOWED_TABS = ["listings", "raions", "branches", "users", "types"];
+
 const navListingsBtn = $("navListings");
 const navRaionsBtn = $("navRaions");
+const navBranchesBtn = $("navBranches");
 const navUsersBtn = $("navUsers");
 const navTypesBtn = $("navTypes");
 
 const viewListings = $("viewListings");
 const viewRaions = $("viewRaions");
+const viewBranches = $("viewBranches");
 const viewUsers = $("viewUsers");
 const viewTypes = $("viewTypes");
+
+const branchesTbody = $("branchesTbody");
+const branchesEmpty = $("branchesEmpty");
+const branchesError = $("branchesError");
+const branchesSearchInput = $("branchesSearchInput");
+const branchesExportBtn = $("branchesExportBtn");
+const addBranchBtn = $("addBranchBtn");
+
+const branchEditorPanel = $("branchEditorPanel");
+const branchEditorBackdrop = $("branchEditorBackdrop");
+const branchEditorCloseBtn = $("branchEditorCloseBtn");
+const branchEditorForm = $("branchEditorForm");
+const branchEditorError = $("branchEditorError");
+const branchEditorIdInput = $("branchEditorId");
+const branchEditorTitle = $("branchEditorTitle");
+const branchEditorSubtitle = $("branchEditorSubtitle");
+const branchEditorSubmitBtn = $("branchEditorSubmitBtn");
+const branchEditorCancelBtn = $("branchEditorCancelBtn");
+const branchEditorNameInput = $("branchEditorName");
+const branchEditorCodeInput = $("branchEditorCode");
+const branchEditorSortInput = $("branchEditorSort");
+const branchEditorCityInput = $("branchEditorCity");
+const branchEditorPhoneInput = $("branchEditorPhone");
+const branchEditorAddressInput = $("branchEditorAddress");
+const branchEditorEmailInput = $("branchEditorEmail");
+const branchEditorDirectorInput = $("branchEditorDirector");
+const branchEditorHoursInput = $("branchEditorHours");
+const branchEditorNotesInput = $("branchEditorNotes");
+const branchEditorActiveInput = $("branchEditorActive");
+
+/** @type {unknown[]} */
+let branchesCache = [];
+let branchesSearchTimer = null;
 
 let activeTab = "listings";
 
@@ -191,6 +253,14 @@ let loadingOverlayEnabled = true;
 let autoOpenLastTab = true;
 let lastTab = "listings";
 let lastTabPersistTimer = null;
+
+let uiScale = "comfortable"; // compact | comfortable | large
+let glassStyle = "balanced"; // subtle | balanced | rich
+let sidebarCompact = false;
+let uiDensity = "comfortable"; // comfortable | compact
+let toastEnabled = true;
+let toastDurationSec = 3;
+let defaultStartTab = "listings";
 
 let authInvalid = false; // токен устарел; фоновые запросы не делаем
 
@@ -226,6 +296,56 @@ function applyThemeMode(nextMode) {
       systemThemePill.textContent = `Система: ${sys} (режим: ${themeMode === "dark" ? "Темная" : "Светлая"})`;
     }
   }
+}
+
+function setUiScaleSegmentUi(scale) {
+  const s = scale === "compact" || scale === "large" ? scale : "comfortable";
+  if (uiScaleCompactBtn) uiScaleCompactBtn.classList.toggle("active", s === "compact");
+  if (uiScaleComfortableBtn) uiScaleComfortableBtn.classList.toggle("active", s === "comfortable");
+  if (uiScaleLargeBtn) uiScaleLargeBtn.classList.toggle("active", s === "large");
+}
+
+function applyUiScale(scale) {
+  const s = ["compact", "comfortable", "large"].includes(scale) ? scale : "comfortable";
+  uiScale = s;
+  document.body.dataset.uiScale = s;
+  setUiScaleSegmentUi(s);
+}
+
+function setGlassStyleSegmentUi(style) {
+  const s = style === "subtle" || style === "rich" ? style : "balanced";
+  if (glassStyleSubtleBtn) glassStyleSubtleBtn.classList.toggle("active", s === "subtle");
+  if (glassStyleBalancedBtn) glassStyleBalancedBtn.classList.toggle("active", s === "balanced");
+  if (glassStyleRichBtn) glassStyleRichBtn.classList.toggle("active", s === "rich");
+}
+
+function applyGlassStyle(style) {
+  const s = ["subtle", "balanced", "rich"].includes(style) ? style : "balanced";
+  glassStyle = s;
+  document.body.classList.remove("glass-style-subtle", "glass-style-rich");
+  if (s === "subtle") document.body.classList.add("glass-style-subtle");
+  if (s === "rich") document.body.classList.add("glass-style-rich");
+  setGlassStyleSegmentUi(s);
+}
+
+function applySidebarCompact(on) {
+  sidebarCompact = !!on;
+  document.body.classList.toggle("sidebar-compact", sidebarCompact);
+  if (sidebarCompactInput) sidebarCompactInput.checked = sidebarCompact;
+}
+
+function applyUiDensity(density) {
+  const d = density === "compact" ? "compact" : "comfortable";
+  uiDensity = d;
+  document.body.classList.toggle("ui-density-compact", d === "compact");
+  if (uiDensityCompactInput) uiDensityCompactInput.checked = d === "compact";
+}
+
+function updateDefaultStartTabFieldState() {
+  if (!defaultStartTabSelect) return;
+  const wrap = defaultStartTabSelect.closest(".field");
+  defaultStartTabSelect.disabled = !!autoOpenLastTab;
+  if (wrap) wrap.classList.toggle("settings-field-dimmed", !!autoOpenLastTab);
 }
 
 function stopAutoRefresh() {
@@ -309,6 +429,8 @@ function escapeHtml(value) {
 }
 
 function toast(title, body, type = "default") {
+  if (!toastEnabled) return;
+  if (!toastHost) return;
   const el = document.createElement("div");
   el.className = `toast${type === "danger" ? " danger" : ""}`;
 
@@ -324,12 +446,14 @@ function toast(title, body, type = "default") {
   el.appendChild(b);
   toastHost.appendChild(el);
 
+  const totalMs = Math.max(1200, Math.round((Number(toastDurationSec) || 3) * 1000));
+  const fadeAt = Math.max(500, totalMs - 420);
   setTimeout(() => {
     el.style.opacity = "0";
     el.style.transform = "translateY(6px)";
     el.style.transition = "160ms ease";
-  }, 2800);
-  setTimeout(() => el.remove(), 3200);
+  }, fadeAt);
+  setTimeout(() => el.remove(), totalMs + 280);
 }
 
 function isEmailValid() {
@@ -370,8 +494,16 @@ async function loadSettings() {
     loadingOverlayEnabled: loe,
     autoOpenLastTab: aolt,
     lastTab: lt,
+    uiScale: us,
+    sidebarCompact: sc,
+    glassStyle: gs,
+    uiDensity: ud,
+    toastEnabled: te,
+    toastDurationSec: tds,
+    defaultStartTab: dst,
   } = await window.desktopApi.getSettings();
   baseUrlInput.value = baseUrl;
+  if (settingsBaseUrlInput) settingsBaseUrlInput.value = baseUrl;
   applyThemeMode(tm || "system");
 
   autoRefreshEnabled = !!are;
@@ -389,11 +521,29 @@ async function loadSettings() {
   if (loadingOverlayEnabledInput) loadingOverlayEnabledInput.checked = loadingOverlayEnabled;
   if (autoOpenLastTabInput) autoOpenLastTabInput.checked = autoOpenLastTab;
 
+  applyUiScale(us || "comfortable");
+  applyGlassStyle(gs || "balanced");
+  applySidebarCompact(!!sc);
+  applyUiDensity(ud || "comfortable");
+
+  toastEnabled = te !== false;
+  toastDurationSec = Number.isFinite(Number(tds)) ? Number(tds) : 3;
+  if (toastEnabledInput) toastEnabledInput.checked = toastEnabled;
+  if (toastDurationSecSelect) toastDurationSecSelect.value = String(Math.min(12, Math.max(2, Math.round(toastDurationSec))));
+
+  const allowedTabs = ["listings", "raions", "users", "types"];
+  defaultStartTab = dst && allowedTabs.includes(String(dst)) ? String(dst) : "listings";
+  if (defaultStartTabSelect) defaultStartTabSelect.value = defaultStartTab;
+  updateDefaultStartTabFieldState();
+
   document.body.classList.toggle("no-animations", !animationsEnabled);
 
   if (rememberEmailCheckbox) {
     rememberEmailCheckbox.checked = !!rememberEmail;
     emailInput.value = rememberEmailCheckbox.checked ? String(lastEmail || "") : "";
+  }
+  if (settingsRememberEmailInput) {
+    settingsRememberEmailInput.checked = !!rememberEmail;
   }
 }
 
@@ -1279,7 +1429,10 @@ async function showDashboard(auth) {
 
   // Default tab
   const allowedTabs = ["listings", "raions", "users", "types"];
-  const initialTab = autoOpenLastTab && allowedTabs.includes(lastTab) ? lastTab : "listings";
+  const initialTab =
+    autoOpenLastTab && allowedTabs.includes(lastTab)
+      ? lastTab
+      : (allowedTabs.includes(defaultStartTab) ? defaultStartTab : "listings");
   setActiveView(initialTab);
   await refreshForActiveTab();
   startAutoRefreshIfNeeded();
@@ -1461,6 +1614,7 @@ passwordInput.addEventListener("input", () => {
 function persistRememberEmail() {
   if (!rememberEmailCheckbox) return;
   const checked = !!rememberEmailCheckbox.checked;
+  if (settingsRememberEmailInput) settingsRememberEmailInput.checked = checked;
   const v = checked ? emailInput.value.trim() : "";
   window.desktopApi.setSettings(undefined, { rememberEmail: checked, lastEmail: v }).catch(() => {});
 }
@@ -1547,11 +1701,39 @@ refreshBtn.addEventListener("click", async () => {
   } catch {}
 });
 
+async function refreshSettingsPanel() {
+  if (!window.desktopApi || !window.desktopApi.getSettings) return;
+  try {
+    const s = await window.desktopApi.getSettings();
+    if (settingsBaseUrlInput) settingsBaseUrlInput.value = s.baseUrl || "";
+    applyUiScale(s.uiScale || "comfortable");
+    applyGlassStyle(s.glassStyle || "balanced");
+    applySidebarCompact(!!s.sidebarCompact);
+    applyUiDensity(s.uiDensity || "comfortable");
+    toastEnabled = s.toastEnabled !== false;
+    toastDurationSec = Number(s.toastDurationSec ?? 3);
+    if (toastEnabledInput) toastEnabledInput.checked = toastEnabled;
+    if (toastDurationSecSelect) {
+      toastDurationSecSelect.value = String(Math.min(12, Math.max(2, Math.round(toastDurationSec))));
+    }
+    const allowedTabs = ["listings", "raions", "users", "types"];
+    defaultStartTab = s.defaultStartTab && allowedTabs.includes(String(s.defaultStartTab)) ? String(s.defaultStartTab) : "listings";
+    if (defaultStartTabSelect) defaultStartTabSelect.value = defaultStartTab;
+    updateDefaultStartTabFieldState();
+    if (settingsConnectionStatusEl) {
+      settingsConnectionStatusEl.textContent = "";
+      settingsConnectionStatusEl.className = "settings-status-pill";
+    }
+  } catch {}
+}
+
 function setSettingsOpen(open) {
   if (!settingsPanel) return;
   settingsPanel.classList.toggle("hidden", !open);
-  if (open) document.body.style.overflow = "hidden";
-  else {
+  if (open) {
+    document.body.style.overflow = "hidden";
+    void refreshSettingsPanel();
+  } else {
     const otherModalOpen =
       (createVariantPanel && !createVariantPanel.classList.contains("hidden")) ||
       (variantDetailPanel && !variantDetailPanel.classList.contains("hidden")) ||
@@ -1628,6 +1810,147 @@ if (autoOpenLastTabInput) {
   autoOpenLastTabInput.addEventListener("change", () => {
     autoOpenLastTab = !!autoOpenLastTabInput.checked;
     persistUiSetting({ autoOpenLastTab });
+    updateDefaultStartTabFieldState();
+  });
+}
+
+function persistUiScale(next) {
+  applyUiScale(next);
+  persistUiSetting({ uiScale });
+}
+
+if (uiScaleCompactBtn) uiScaleCompactBtn.addEventListener("click", () => persistUiScale("compact"));
+if (uiScaleComfortableBtn) uiScaleComfortableBtn.addEventListener("click", () => persistUiScale("comfortable"));
+if (uiScaleLargeBtn) uiScaleLargeBtn.addEventListener("click", () => persistUiScale("large"));
+
+function persistGlassStyle(next) {
+  applyGlassStyle(next);
+  persistUiSetting({ glassStyle: next });
+}
+
+if (glassStyleSubtleBtn) glassStyleSubtleBtn.addEventListener("click", () => persistGlassStyle("subtle"));
+if (glassStyleBalancedBtn) glassStyleBalancedBtn.addEventListener("click", () => persistGlassStyle("balanced"));
+if (glassStyleRichBtn) glassStyleRichBtn.addEventListener("click", () => persistGlassStyle("rich"));
+
+if (sidebarCompactInput) {
+  sidebarCompactInput.addEventListener("change", () => {
+    applySidebarCompact(!!sidebarCompactInput.checked);
+    persistUiSetting({ sidebarCompact });
+  });
+}
+
+if (uiDensityCompactInput) {
+  uiDensityCompactInput.addEventListener("change", () => {
+    const d = uiDensityCompactInput.checked ? "compact" : "comfortable";
+    applyUiDensity(d);
+    persistUiSetting({ uiDensity: d });
+  });
+}
+
+if (toastEnabledInput) {
+  toastEnabledInput.addEventListener("change", () => {
+    toastEnabled = !!toastEnabledInput.checked;
+    persistUiSetting({ toastEnabled });
+  });
+}
+
+if (toastDurationSecSelect) {
+  toastDurationSecSelect.addEventListener("change", () => {
+    const n = Number(toastDurationSecSelect.value);
+    toastDurationSec = Number.isFinite(n) ? n : 3;
+    persistUiSetting({ toastDurationSec: toastDurationSec });
+  });
+}
+
+if (defaultStartTabSelect) {
+  defaultStartTabSelect.addEventListener("change", () => {
+    const v = String(defaultStartTabSelect.value || "listings");
+    defaultStartTab = v;
+    persistUiSetting({ defaultStartTab: v });
+  });
+}
+
+if (settingsRememberEmailInput) {
+  settingsRememberEmailInput.addEventListener("change", () => {
+    const c = !!settingsRememberEmailInput.checked;
+    if (rememberEmailCheckbox) rememberEmailCheckbox.checked = c;
+    const v = c ? emailInput.value.trim() : "";
+    persistUiSetting({ rememberEmail: c, lastEmail: v });
+  });
+}
+
+async function saveSettingsBaseUrl() {
+  if (!settingsBaseUrlInput) return;
+  let url = settingsBaseUrlInput.value.trim().replace(/\/$/, "");
+  if (!url) {
+    toast("URL", "Введите адрес сервера.", "danger");
+    return;
+  }
+  try {
+    await window.desktopApi.setSettings(url, {});
+    if (baseUrlInput) baseUrlInput.value = url;
+    toast("Сохранено", "Base URL обновлён.");
+    if (settingsConnectionStatusEl) {
+      settingsConnectionStatusEl.textContent = "Сохранено локально. Нажмите «Проверить», чтобы убедиться, что сервер отвечает.";
+      settingsConnectionStatusEl.className = "settings-status-pill";
+    }
+  } catch (err) {
+    toast("Ошибка", (err && err.message) || "Не удалось сохранить URL", "danger");
+  }
+}
+
+async function testSettingsBaseUrl() {
+  if (!settingsBaseUrlInput || !settingsConnectionStatusEl) return;
+  let url = settingsBaseUrlInput.value.trim().replace(/\/$/, "");
+  if (!url) {
+    settingsConnectionStatusEl.textContent = "Сначала введите URL";
+    settingsConnectionStatusEl.className = "settings-status-pill bad";
+    return;
+  }
+  settingsConnectionStatusEl.textContent = "Проверка…";
+  settingsConnectionStatusEl.className = "settings-status-pill";
+  try {
+    await window.desktopApi.pingApi(url);
+    settingsConnectionStatusEl.textContent = "Сервер отвечает — соединение в порядке";
+    settingsConnectionStatusEl.className = "settings-status-pill ok";
+    toast("Сервер", "Ответ получен.");
+  } catch {
+    settingsConnectionStatusEl.textContent = "Нет ответа: проверьте URL, интернет или что сервер запущен";
+    settingsConnectionStatusEl.className = "settings-status-pill bad";
+    toast("Сервер", "Не удалось связаться с API.", "danger");
+  }
+}
+
+if (settingsSaveBaseUrlBtn) settingsSaveBaseUrlBtn.addEventListener("click", () => void saveSettingsBaseUrl());
+if (settingsTestBaseUrlBtn) settingsTestBaseUrlBtn.addEventListener("click", () => void testSettingsBaseUrl());
+
+if (settingsCopyBaseUrlBtn && settingsBaseUrlInput) {
+  settingsCopyBaseUrlBtn.addEventListener("click", async () => {
+    const t = settingsBaseUrlInput.value.trim();
+    if (!t) return;
+    try {
+      await navigator.clipboard.writeText(t);
+      toast("Буфер", "URL скопирован.");
+    } catch {
+      toast("Буфер", "Не удалось скопировать.", "danger");
+    }
+  });
+}
+
+if (settingsRefreshNowBtn) {
+  settingsRefreshNowBtn.addEventListener("click", async () => {
+    try {
+      if (activeTab === "listings") await renderListings();
+      if (activeTab === "raions") await renderRaions();
+      if (activeTab === "users") await renderUsers();
+      if (activeTab === "types") {
+        applyVariantsToolbarForRole();
+        await renderVariants();
+      }
+      toast("Данные", "Текущая вкладка обновлена.");
+    } catch {
+      toast("Ошибка", "Не удалось обновить.", "danger");
+    }
   });
 }
 
@@ -1653,6 +1976,7 @@ if (clearSavedEmailBtn) {
     setSettingsOpen(false);
     persistUiSetting({ rememberEmail: false, lastEmail: "" });
     if (rememberEmailCheckbox) rememberEmailCheckbox.checked = false;
+    if (settingsRememberEmailInput) settingsRememberEmailInput.checked = false;
     if (emailInput) emailInput.value = "";
     toast("Готово", "Email очищен.", "default");
   });
@@ -1821,6 +2145,10 @@ document.addEventListener("keydown", (e) => {
     }
     if (userEditorPanel && !userEditorPanel.classList.contains("hidden")) {
       setUserEditorOpen(false);
+      return;
+    }
+    if (settingsPanel && !settingsPanel.classList.contains("hidden")) {
+      setSettingsOpen(false);
     }
     return;
   }

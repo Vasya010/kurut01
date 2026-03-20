@@ -148,6 +148,7 @@
             Объявления
           </button>
           <button id="navRaions" class="nav-item" type="button">Районы</button>
+          <button id="navBranches" class="nav-item" type="button">Филиалы</button>
           <button id="navUsers" class="nav-item" type="button">Пользователи</button>
           <button id="navTypes" class="nav-item" type="button">Варианты</button>
         </nav>
@@ -165,7 +166,7 @@
           </div>
           <div class="topbar-actions">
             <button id="refreshBtn" class="secondary-btn compact" type="button">Обновить</button>
-            <button id="openSettingsBtn" class="secondary-btn compact" type="button">Настройки</button>
+            <button id="openSettingsBtn" class="secondary-btn compact settings-entry-btn" type="button" title="Настройки приложения">⚙ Настройки</button>
           </div>
         </header>
 
@@ -214,6 +215,44 @@
               </div>
 
               <div id="listingsError" class="alert hidden" role="alert"></div>
+            </div>
+          </div>
+
+          <div id="viewBranches" class="view-panel hidden">
+            <div class="panel panel-branches">
+              <div class="panel-header panel-header--split">
+                <div>
+                  <div class="panel-title">Филиалы</div>
+                  <div class="panel-subtitle">Офисы сети: адреса, контакты, расписание</div>
+                </div>
+                <div class="branches-toolbar">
+                  <input id="branchesSearchInput" class="branches-search" type="search" placeholder="Поиск по названию, городу, коду…" autocomplete="off" />
+                  <button id="branchesExportBtn" class="ghost-btn compact" type="button" title="Экспорт в CSV">Экспорт CSV</button>
+                  <button id="addBranchBtn" class="secondary-btn compact" type="button">Добавить филиал</button>
+                </div>
+              </div>
+
+              <div class="table-wrap">
+                <table class="table">
+                  <thead>
+                    <tr>
+                      <th>ID</th>
+                      <th>Название</th>
+                      <th>Код</th>
+                      <th>Город</th>
+                      <th>Телефон</th>
+                      <th>Руководитель</th>
+                      <th>Порядок</th>
+                      <th>Статус</th>
+                      <th class="branches-actions-col">Действия</th>
+                    </tr>
+                  </thead>
+                  <tbody id="branchesTbody"></tbody>
+                </table>
+              </div>
+
+              <div id="branchesEmpty" class="empty hidden">Нет филиалов. Добавьте первый офис.</div>
+              <div id="branchesError" class="alert hidden" role="alert"></div>
             </div>
           </div>
 
@@ -327,6 +366,82 @@
             </div>
           </div>
 
+          <div id="branchEditorPanel" class="modal hidden" role="dialog" aria-modal="true" aria-label="Редактор филиала">
+            <div id="branchEditorBackdrop" class="modal-backdrop"></div>
+            <div class="modal-sheet modal-sheet--wide">
+              <div class="modal-top">
+                <div>
+                  <div id="branchEditorTitle" class="modal-title">Филиал</div>
+                  <div id="branchEditorSubtitle" class="modal-subtitle">Карточка офиса</div>
+                </div>
+                <button id="branchEditorCloseBtn" class="icon-btn" type="button" aria-label="Закрыть">✕</button>
+              </div>
+
+              <form id="branchEditorForm" class="modal-form" autocomplete="off">
+                <div id="branchEditorError" class="alert hidden" role="alert"></div>
+                <input type="hidden" id="branchEditorId" value="" />
+
+                <div class="modal-grid modal-grid-variants">
+                  <div class="field span-2">
+                    <label for="branchEditorName">Название <span class="req">*</span></label>
+                    <input id="branchEditorName" type="text" required placeholder="Например: Центральный офис" />
+                  </div>
+                  <div class="field">
+                    <label for="branchEditorCode">Внутренний код</label>
+                    <input id="branchEditorCode" type="text" placeholder="MSK-01" maxlength="32" />
+                  </div>
+                  <div class="field">
+                    <label for="branchEditorSort">Порядок сортировки</label>
+                    <input id="branchEditorSort" type="number" step="1" value="0" />
+                  </div>
+                  <div class="field">
+                    <label for="branchEditorCity">Город</label>
+                    <input id="branchEditorCity" type="text" placeholder="Город" />
+                  </div>
+                  <div class="field">
+                    <label for="branchEditorPhone">Телефон</label>
+                    <input id="branchEditorPhone" type="text" placeholder="+996 …" />
+                  </div>
+                  <div class="field span-2">
+                    <label for="branchEditorAddress">Адрес</label>
+                    <input id="branchEditorAddress" type="text" placeholder="Улица, дом, офис" />
+                  </div>
+                  <div class="field">
+                    <label for="branchEditorEmail">Email</label>
+                    <input id="branchEditorEmail" type="email" placeholder="office@…" />
+                  </div>
+                  <div class="field">
+                    <label for="branchEditorDirector">Руководитель</label>
+                    <input id="branchEditorDirector" type="text" placeholder="ФИО" />
+                  </div>
+                  <div class="field span-2">
+                    <label for="branchEditorHours">Часы работы</label>
+                    <input id="branchEditorHours" type="text" placeholder="Пн–Пт 9:00–18:00" />
+                  </div>
+                  <div class="field span-2">
+                    <label for="branchEditorNotes">Заметки</label>
+                    <textarea id="branchEditorNotes" rows="3" placeholder="Дополнительно…"></textarea>
+                  </div>
+                  <div class="field span-2 checkbox-row">
+                    <label class="settings-toggle settings-toggle--inline">
+                      <input id="branchEditorActive" type="checkbox" class="settings-toggle-input" checked />
+                      <span class="settings-toggle-ui" aria-hidden="true"></span>
+                      <span class="settings-toggle-label">
+                        <span class="settings-toggle-title">Филиал активен</span>
+                        <span class="settings-toggle-sub">Неактивные скрываются в списках для сотрудников (при фильтрации)</span>
+                      </span>
+                    </label>
+                  </div>
+                </div>
+
+                <div class="modal-actions">
+                  <button id="branchEditorSubmitBtn" class="primary-btn" type="submit">Сохранить</button>
+                  <button id="branchEditorCancelBtn" class="secondary-btn" type="button">Отмена</button>
+                </div>
+              </form>
+            </div>
+          </div>
+
           <div id="viewTypes" class="view-panel hidden">
             <div class="panel">
               <div class="panel-header">
@@ -411,72 +526,230 @@
       </div>
     </div>
 
-    <div id="settingsPanel" class="modal hidden" role="dialog" aria-modal="true" aria-label="Настройки интерфейса">
+    <div id="settingsPanel" class="modal hidden" role="dialog" aria-modal="true" aria-label="Настройки Kurut Desktop">
       <div id="settingsBackdrop" class="modal-backdrop"></div>
-      <div class="modal-sheet">
-        <div class="modal-top">
-          <div>
-            <div class="modal-title">Настройки</div>
-            <div id="settingsSubtitle" class="modal-subtitle">Тема, автообновление и поведение интерфейса</div>
+      <div class="modal-sheet modal-sheet--wide settings-sheet">
+        <div class="modal-top settings-top">
+          <div class="settings-top-text">
+            <div class="settings-brand-row">
+              <div class="settings-brand-mark" aria-hidden="true">K</div>
+              <div>
+                <div class="modal-title">Настройки</div>
+                <div id="settingsSubtitle" class="modal-subtitle">Сервер, внешний вид, поведение и уведомления — всё в одном месте</div>
+              </div>
+            </div>
           </div>
           <button id="settingsCloseBtn" class="icon-btn" type="button" aria-label="Закрыть">✕</button>
         </div>
 
-        <div class="modal-form">
-          <div class="field">
-            <label>Тема</label>
-            <div class="segmented" role="tablist" aria-label="Режим темы">
-              <button id="themeModeSystem" class="seg-btn active" type="button">Система</button>
-              <button id="themeModeDark" class="seg-btn" type="button">Темная</button>
-              <button id="themeModeLight" class="seg-btn" type="button">Светлая</button>
-            </div>
-            <div id="systemThemePill" class="hint" aria-live="polite"></div>
-          </div>
+        <div class="modal-form settings-body">
+          <div class="settings-grid">
 
-          <div class="field">
-            <div class="label-row">
-              <label for="autoRefreshEnabled">Автообновление</label>
-              <input id="autoRefreshEnabled" type="checkbox" />
-            </div>
-            <div class="filter-inline">
-              <label for="autoRefreshIntervalSec">Интервал</label>
-              <select id="autoRefreshIntervalSec">
-                <option value="15">15 секунд</option>
-                <option value="30">30 секунд</option>
-                <option value="60" selected>60 секунд</option>
-                <option value="120">120 секунд</option>
-              </select>
-            </div>
-            <div class="field-hint">Перезагружает текущую вкладку (варианты/объявления/районы/пользователи).</div>
-          </div>
+            <section class="settings-card" aria-labelledby="settings-h-server">
+              <div class="settings-card-head">
+                <span class="settings-card-icon" aria-hidden="true">◎</span>
+                <div>
+                  <h3 id="settings-h-server" class="settings-card-title">Сервер и подключение</h3>
+                  <p class="settings-card-desc">Base URL сохраняется на ПК и используется для всех запросов</p>
+                </div>
+              </div>
+              <div class="settings-card-body">
+                <div class="field">
+                  <label for="settingsBaseUrl">Адрес API (Base URL)</label>
+                  <input id="settingsBaseUrl" type="url" inputmode="url" autocomplete="off" placeholder="https://example.com" />
+                </div>
+                <div class="settings-inline-actions">
+                  <button id="settingsSaveBaseUrlBtn" class="primary-btn compact" type="button">Сохранить URL</button>
+                  <button id="settingsTestBaseUrlBtn" class="secondary-btn compact" type="button">Проверить</button>
+                  <button id="settingsCopyBaseUrlBtn" class="ghost-btn compact" type="button">Копировать</button>
+                </div>
+                <div id="settingsConnectionStatus" class="settings-status-pill" role="status" aria-live="polite"></div>
+              </div>
+            </section>
 
-          <div class="field">
-            <div class="label-row">
-              <label for="animationsEnabled">Анимации UI</label>
-              <input id="animationsEnabled" type="checkbox" />
-            </div>
-            <div class="field-hint">Живое стекло, мягкие переливы и подсветки.</div>
-          </div>
+            <section class="settings-card" aria-labelledby="settings-h-look">
+              <div class="settings-card-head">
+                <span class="settings-card-icon" aria-hidden="true">◐</span>
+                <div>
+                  <h3 id="settings-h-look" class="settings-card-title">Внешний вид</h3>
+                  <p class="settings-card-desc">Тема, масштаб текста и «живое стекло»</p>
+                </div>
+              </div>
+              <div class="settings-card-body">
+                <div class="field">
+                  <label>Тема</label>
+                  <div class="segmented" role="tablist" aria-label="Режим темы">
+                    <button id="themeModeSystem" class="seg-btn active" type="button">Система</button>
+                    <button id="themeModeDark" class="seg-btn" type="button">Тёмная</button>
+                    <button id="themeModeLight" class="seg-btn" type="button">Светлая</button>
+                  </div>
+                  <div id="systemThemePill" class="settings-pill-hint" aria-live="polite"></div>
+                </div>
+                <div class="field">
+                  <label>Размер интерфейса</label>
+                  <div class="segmented" role="tablist" aria-label="Масштаб интерфейса">
+                    <button id="uiScaleCompact" class="seg-btn" type="button">Компакт</button>
+                    <button id="uiScaleComfortable" class="seg-btn active" type="button">Стандарт</button>
+                    <button id="uiScaleLarge" class="seg-btn" type="button">Крупнее</button>
+                  </div>
+                  <div class="field-hint">Влияет на базовый размер шрифта в приложении.</div>
+                </div>
+                <div class="field">
+                  <label>Стекло и свечение</label>
+                  <div class="segmented" role="tablist" aria-label="Интенсивность эффекта стекла">
+                    <button id="glassStyleSubtle" class="seg-btn" type="button">Тихо</button>
+                    <button id="glassStyleBalanced" class="seg-btn active" type="button">Баланс</button>
+                    <button id="glassStyleRich" class="seg-btn" type="button">Ярко</button>
+                  </div>
+                </div>
+                <label class="settings-toggle">
+                  <input id="sidebarCompactInput" type="checkbox" class="settings-toggle-input" />
+                  <span class="settings-toggle-ui" aria-hidden="true"></span>
+                  <span class="settings-toggle-label">
+                    <span class="settings-toggle-title">Узкий сайдбар</span>
+                    <span class="settings-toggle-sub">Больше места для таблиц</span>
+                  </span>
+                </label>
+                <label class="settings-toggle">
+                  <input id="uiDensityCompactInput" type="checkbox" class="settings-toggle-input" />
+                  <span class="settings-toggle-ui" aria-hidden="true"></span>
+                  <span class="settings-toggle-label">
+                    <span class="settings-toggle-title">Плотные таблицы</span>
+                    <span class="settings-toggle-sub">Меньше отступов в строках</span>
+                  </span>
+                </label>
+              </div>
+            </section>
 
-          <div class="field">
-            <div class="label-row">
-              <label for="loadingOverlayEnabled">Loading оверлей</label>
-              <input id="loadingOverlayEnabled" type="checkbox" />
-            </div>
-            <div class="field-hint">Показывается при запросах/проверках.</div>
-          </div>
+            <section class="settings-card" aria-labelledby="settings-h-behavior">
+              <div class="settings-card-head">
+                <span class="settings-card-icon" aria-hidden="true">↻</span>
+                <div>
+                  <h3 id="settings-h-behavior" class="settings-card-title">Поведение</h3>
+                  <p class="settings-card-desc">Автообновление, загрузка и запоминание вкладок</p>
+                </div>
+              </div>
+              <div class="settings-card-body">
+                <label class="settings-toggle">
+                  <input id="autoRefreshEnabled" type="checkbox" class="settings-toggle-input" />
+                  <span class="settings-toggle-ui" aria-hidden="true"></span>
+                  <span class="settings-toggle-label">
+                    <span class="settings-toggle-title">Автообновление данных</span>
+                    <span class="settings-toggle-sub">Периодически обновляет открытую вкладку</span>
+                  </span>
+                </label>
+                <div class="filter-inline settings-interval-row">
+                  <label for="autoRefreshIntervalSec">Интервал</label>
+                  <select id="autoRefreshIntervalSec" class="settings-select">
+                    <option value="15">15 сек</option>
+                    <option value="30">30 сек</option>
+                    <option value="60" selected>60 сек</option>
+                    <option value="120">120 сек</option>
+                    <option value="180">3 мин</option>
+                    <option value="300">5 мин</option>
+                  </select>
+                </div>
+                <label class="settings-toggle">
+                  <input id="animationsEnabled" type="checkbox" class="settings-toggle-input" />
+                  <span class="settings-toggle-ui" aria-hidden="true"></span>
+                  <span class="settings-toggle-label">
+                    <span class="settings-toggle-title">Анимации интерфейса</span>
+                    <span class="settings-toggle-sub">Переливы, подсветки и движение «стекла»</span>
+                  </span>
+                </label>
+                <label class="settings-toggle">
+                  <input id="loadingOverlayEnabled" type="checkbox" class="settings-toggle-input" />
+                  <span class="settings-toggle-ui" aria-hidden="true"></span>
+                  <span class="settings-toggle-label">
+                    <span class="settings-toggle-title">Экран загрузки</span>
+                    <span class="settings-toggle-sub">Оверлей при длительных операциях</span>
+                  </span>
+                </label>
+                <label class="settings-toggle">
+                  <input id="autoOpenLastTab" type="checkbox" class="settings-toggle-input" />
+                  <span class="settings-toggle-ui" aria-hidden="true"></span>
+                  <span class="settings-toggle-label">
+                    <span class="settings-toggle-title">Открывать последнюю вкладку</span>
+                    <span class="settings-toggle-sub">Продолжать с того раздела, где вы были</span>
+                  </span>
+                </label>
+                <div class="field">
+                  <label for="defaultStartTabSelect">Стартовая вкладка</label>
+                  <select id="defaultStartTabSelect" class="settings-select">
+                    <option value="listings">Объявления</option>
+                    <option value="raions">Районы</option>
+                    <option value="branches">Филиалы</option>
+                    <option value="users">Пользователи</option>
+                    <option value="types">Варианты</option>
+                  </select>
+                  <div class="field-hint">Используется, если «последняя вкладка» выключена.</div>
+                </div>
+                <div class="settings-inline-actions">
+                  <button id="settingsRefreshNowBtn" class="secondary-btn compact" type="button">Обновить сейчас</button>
+                </div>
+              </div>
+            </section>
 
-          <div class="field">
-            <div class="label-row">
-              <label for="autoOpenLastTab">Автопереход на последнюю вкладку</label>
-              <input id="autoOpenLastTab" type="checkbox" />
-            </div>
-            <div class="field-hint">Например, если ты был на «Варианты», то откроется именно она.</div>
-          </div>
+            <section class="settings-card" aria-labelledby="settings-h-toast">
+              <div class="settings-card-head">
+                <span class="settings-card-icon" aria-hidden="true">✦</span>
+                <div>
+                  <h3 id="settings-h-toast" class="settings-card-title">Уведомления</h3>
+                  <p class="settings-card-desc">Всплывающие сообщения в углу экрана</p>
+                </div>
+              </div>
+              <div class="settings-card-body">
+                <label class="settings-toggle">
+                  <input id="toastEnabledInput" type="checkbox" class="settings-toggle-input" />
+                  <span class="settings-toggle-ui" aria-hidden="true"></span>
+                  <span class="settings-toggle-label">
+                    <span class="settings-toggle-title">Показывать уведомления (toast)</span>
+                    <span class="settings-toggle-sub">Успех, ошибки и подсказки</span>
+                  </span>
+                </label>
+                <div class="filter-inline settings-interval-row">
+                  <label for="toastDurationSecSelect">Длительность</label>
+                  <select id="toastDurationSecSelect" class="settings-select">
+                    <option value="2">2 сек</option>
+                    <option value="3" selected>3 сек</option>
+                    <option value="4">4 сек</option>
+                    <option value="5">5 сек</option>
+                    <option value="6">6 сек</option>
+                    <option value="8">8 сек</option>
+                    <option value="10">10 сек</option>
+                    <option value="12">12 сек</option>
+                  </select>
+                </div>
+              </div>
+            </section>
 
-          <div class="create-actions">
-            <button id="settingsLogoutBtn" class="secondary-btn compact" type="button">Выйти</button>
-            <button id="clearSavedEmailBtn" class="ghost-btn" type="button">Очистить email</button>
+            <section class="settings-card settings-card--span settings-card-account" aria-labelledby="settings-h-account">
+              <div class="settings-card-head">
+                <span class="settings-card-icon" aria-hidden="true">◇</span>
+                <div>
+                  <h3 id="settings-h-account" class="settings-card-title">Аккаунт и вход</h3>
+                  <p class="settings-card-desc">Email на экране входа и выход из сессии</p>
+                </div>
+              </div>
+              <div class="settings-card-body settings-account-grid">
+                <label class="settings-toggle">
+                  <input id="settingsRememberEmail" type="checkbox" class="settings-toggle-input" />
+                  <span class="settings-toggle-ui" aria-hidden="true"></span>
+                  <span class="settings-toggle-label">
+                    <span class="settings-toggle-title">Запоминать email</span>
+                    <span class="settings-toggle-sub">Подставлять при следующем запуске</span>
+                  </span>
+                </label>
+                <div class="settings-account-actions">
+                  <button id="clearSavedEmailBtn" class="ghost-btn compact" type="button">Очистить сохранённый email</button>
+                  <button id="settingsLogoutBtn" class="danger-outline-btn compact" type="button">Выйти из аккаунта</button>
+                </div>
+                <div class="settings-version-foot muted">
+                  Kurut Desktop · <strong>Версия 1.0</strong> · Разработчик: Василий К
+                </div>
+              </div>
+            </section>
+
           </div>
         </div>
       </div>
