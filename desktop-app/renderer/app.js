@@ -648,6 +648,216 @@ async function renderRaions() {
   }
 }
 
+function canManageBranches() {
+  const r = dashboardUser && dashboardUser.role;
+  return r === "SUPER_ADMIN" || r === "ADMIN";
+}
+
+function canDeleteBranches() {
+  return dashboardUser && dashboardUser.role === "SUPER_ADMIN";
+}
+
+function branchMatchesQuery(row, q) {
+  if (!q) return true;
+  const hay = [row.name, row.code, row.city, row.address, row.phone, row.email, row.director_name, row.notes]
+    .map((x) => String(x || "").toLowerCase())
+    .join(" ");
+  return hay.includes(q);
+}
+
+function paintBranchesTable(rows) {
+  if (!branchesTbody) return;
+  branchesTbody.innerHTML = "";
+  const manage = canManageBranches();
+  const delOk = canDeleteBranches();
+
+  for (const row of rows) {
+    const tr = document.createElement("tr");
+    const active = row.is_active === 1 || row.is_active === true;
+    const statusHtml = active
+      ? '<span class="branch-pill branch-pill--on">Активен</span>'
+      : '<span class="branch-pill branch-pill--off">Неактивен</span>';
+
+    tr.innerHTML = `
+      <td>${escapeHtml(row.id)}</td>
+      <td>${escapeHtml(row.name)}</td>
+      <td>${escapeHtml(row.code || "—")}</td>
+      <td>${escapeHtml(row.city || "—")}</td>
+      <td>${escapeHtml(row.phone || "—")}</td>
+      <td>${escapeHtml(row.director_name || "—")}</td>
+      <td>${escapeHtml(row.sort_order ?? 0)}</td>
+      <td>${statusHtml}</td>
+    `;
+
+    const actionsTd = document.createElement("td");
+    actionsTd.className = "branches-actions-cell";
+    if (manage) {
+      const editBtn = document.createElement("button");
+      editBtn.type = "button";
+      editBtn.className = "ghost-btn compact";
+      editBtn.textContent = "Изменить";
+      editBtn.addEventListener("click", () => openBranchEditorEdit(row));
+      actionsTd.appendChild(editBtn);
+      if (delOk) {
+        const delBtn = document.createElement("button");
+        delBtn.type = "button";
+        delBtn.className = "danger-outline-btn compact";
+        delBtn.style.marginLeft = "8px";
+        delBtn.textContent = "Удалить";
+        delBtn.addEventListener("click", () => {
+          void confirmDeleteBranch(row);
+        });
+        actionsTd.appendChild(delBtn);
+      }
+    } else {
+      actionsTd.textContent = "—";
+    }
+    tr.appendChild(actionsTd);
+    branchesTbody.appendChild(tr);
+  }
+}
+
+function applyBranchesFilter() {
+  const q = branchesSearchInput ? branchesSearchInput.value.trim().toLowerCase() : "";
+  const filtered = branchesCache.filter((r) => branchMatchesQuery(r, q));
+  setHidden(branchesEmpty, filtered.length !== 0);
+  paintBranchesTable(filtered);
+}
+
+async function renderBranches() {
+  setHidden(branchesError, true);
+  if (branchesEmpty) branchesEmpty.classList.add("hidden");
+
+  if (addBranchBtn) addBranchBtn.classList.toggle("hidden", !canManageBranches());
+
+  try {
+    const rows = await window.desktopApi.getBranches();
+    const safe = Array.isArray(rows) ? rows : [];
+    branchesCache = safe;
+    setHidden(branchesError, true);
+    if (safe.length === 0) {
+      if (branchesTbody) branchesTbody.innerHTML = "";
+      setHidden(branchesEmpty, false);
+      return;
+    }
+    applyBranchesFilter();
+  } catch (err) {
+    if (err && err.status === 401) {
+      toast("Сессия устарела", "Войдите снова.", "danger");
+      await showLogin("Сессия устарела. Выполните вход снова.");
+      return;
+    }
+    const message = (err && err.message) ? err.message : "Ошибка загрузки филиалов";
+    showAlert(branchesError, message);
+    setHidden(branchesEmpty, true);
+  }
+}
+
+function downloadCsv(filename, csvContent) {
+  const BOM = "\uFEFF";
+  const blob = new Blob([BOM + csvContent], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function exportBranchesCsv() {
+  const cols = ["id", "name", "code", "city", "address", "phone", "email", "director_name", "work_hours", "sort_order", "is_active", "notes"];
+  const esc = (v) => {
+    const s = String(v ?? "").replaceAll('"', '""');
+    return `"${s}"`;
+  };
+  const lines = [cols.join(";")];
+  for (const r of branchesCache) {
+    lines.push(cols.map((c) => esc(r[c])).join(";"));
+  }
+  downloadCsv(`filialy-${new Date().toISOString().slice(0, 10)}.csv`, lines.join("\n"));
+  toast("Экспорт", "CSV скачан.");
+}
+
+function setBranchEditorError(msg) {
+  if (!branchEditorError) return;
+  branchEditorError.textContent = msg || "";
+  setHidden(branchEditorError, !msg);
+}
+
+function setBranchEditorOpen(open) {
+  if (!branchEditorPanel) return;
+  branchEditorPanel.classList.toggle("hidden", !open);
+  if (open) {
+    document.body.style.overflow = "hidden";
+  } else {
+    const otherModalOpen =
+      (createVariantPanel && !createVariantPanel.classList.contains("hidden")) ||
+      (variantDetailPanel && !variantDetailPanel.classList.contains("hidden")) ||
+      (userEditorPanel && !userEditorPanel.classList.contains("hidden")) ||
+      (settingsPanel && !settingsPanel.classList.contains("hidden"));
+    document.body.style.overflow = otherModalOpen ? "hidden" : "";
+  }
+}
+
+let branchEditorMode = "create";
+
+function resetBranchEditorForm() {
+  if (branchEditorForm) branchEditorForm.reset();
+  if (branchEditorIdInput) branchEditorIdInput.value = "";
+  if (branchEditorActiveInput) branchEditorActiveInput.checked = true;
+  if (branchEditorSortInput) branchEditorSortInput.value = "0";
+  setBranchEditorError("");
+}
+
+function openBranchEditorCreate() {
+  if (!canManageBranches()) {
+    toast("Нет доступа", "Филиалы может редактировать SUPER_ADMIN или ADMIN.", "danger");
+    return;
+  }
+  resetBranchEditorForm();
+  branchEditorMode = "create";
+  if (branchEditorTitle) branchEditorTitle.textContent = "Новый филиал";
+  if (branchEditorSubtitle) branchEditorSubtitle.textContent = "Карточка офиса на карте сети";
+  if (branchEditorSubmitBtn) branchEditorSubmitBtn.textContent = "Создать";
+  setBranchEditorOpen(true);
+}
+
+function openBranchEditorEdit(row) {
+  if (!canManageBranches()) return;
+  resetBranchEditorForm();
+  branchEditorMode = "edit";
+  if (branchEditorIdInput) branchEditorIdInput.value = String(row.id);
+  if (branchEditorNameInput) branchEditorNameInput.value = row.name || "";
+  if (branchEditorCodeInput) branchEditorCodeInput.value = row.code || "";
+  if (branchEditorCityInput) branchEditorCityInput.value = row.city || "";
+  if (branchEditorAddressInput) branchEditorAddressInput.value = row.address || "";
+  if (branchEditorPhoneInput) branchEditorPhoneInput.value = row.phone || "";
+  if (branchEditorEmailInput) branchEditorEmailInput.value = row.email || "";
+  if (branchEditorDirectorInput) branchEditorDirectorInput.value = row.director_name || "";
+  if (branchEditorHoursInput) branchEditorHoursInput.value = row.work_hours || "";
+  if (branchEditorNotesInput) branchEditorNotesInput.value = row.notes || "";
+  if (branchEditorSortInput) branchEditorSortInput.value = String(row.sort_order ?? 0);
+  if (branchEditorActiveInput) branchEditorActiveInput.checked = row.is_active === 1 || row.is_active === true;
+  if (branchEditorTitle) branchEditorTitle.textContent = "Редактирование филиала";
+  if (branchEditorSubtitle) branchEditorSubtitle.textContent = `ID ${row.id}`;
+  if (branchEditorSubmitBtn) branchEditorSubmitBtn.textContent = "Сохранить";
+  setBranchEditorOpen(true);
+}
+
+async function confirmDeleteBranch(row) {
+  if (!canDeleteBranches()) return;
+  const ok = window.confirm(`Удалить филиал «${row.name}» (ID ${row.id})? Действие необратимо.`);
+  if (!ok) return;
+  try {
+    await window.desktopApi.deleteBranch(row.id);
+    toast("Удалено", "Филиал удалён.");
+    await renderBranches();
+  } catch (err) {
+    toast("Ошибка", (err && err.message) || "Не удалось удалить", "danger");
+    if (err && err.status === 401) await showLogin("Сессия устарела. Выполните вход снова.");
+  }
+}
+
 async function renderUsers() {
   setHidden(usersError, true);
   showAlert(usersEmpty, "");
