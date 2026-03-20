@@ -358,6 +358,7 @@ function stopAutoRefresh() {
 async function refreshForActiveTab() {
   if (activeTab === "listings") await renderListings();
   else if (activeTab === "raions") await renderRaions();
+  else if (activeTab === "branches") await renderBranches();
   else if (activeTab === "users") await renderUsers();
   else if (activeTab === "types") {
     applyVariantsToolbarForRole();
@@ -531,8 +532,7 @@ async function loadSettings() {
   if (toastEnabledInput) toastEnabledInput.checked = toastEnabled;
   if (toastDurationSecSelect) toastDurationSecSelect.value = String(Math.min(12, Math.max(2, Math.round(toastDurationSec))));
 
-  const allowedTabs = ["listings", "raions", "users", "types"];
-  defaultStartTab = dst && allowedTabs.includes(String(dst)) ? String(dst) : "listings";
+  defaultStartTab = dst && APP_ALLOWED_TABS.includes(String(dst)) ? String(dst) : "listings";
   if (defaultStartTabSelect) defaultStartTabSelect.value = defaultStartTab;
   updateDefaultStartTabFieldState();
 
@@ -1356,6 +1356,7 @@ function setActiveNav(tab) {
   const map = {
     listings: navListingsBtn,
     raions: navRaionsBtn,
+    branches: navBranchesBtn,
     users: navUsersBtn,
     types: navTypesBtn,
   };
@@ -1369,6 +1370,7 @@ function setActiveView(tab) {
   // Toggle visibility.
   setHidden(viewListings, tab !== "listings");
   setHidden(viewRaions, tab !== "raions");
+  setHidden(viewBranches, tab !== "branches");
   setHidden(viewUsers, tab !== "users");
   setHidden(viewTypes, tab !== "types");
 
@@ -1385,6 +1387,9 @@ function setActiveView(tab) {
     } else if (tab === "raions") {
       pageTitleEl.textContent = "Админ panel";
       pageSubtitleEl.textContent = "Районы и микрорайоны";
+    } else if (tab === "branches") {
+      pageTitleEl.textContent = "Филиалы";
+      pageSubtitleEl.textContent = "Офисы сети — карточки и контакты";
     } else if (tab === "users") {
       pageTitleEl.textContent = "Админ panel";
       pageSubtitleEl.textContent = "Пользователи и роли";
@@ -1428,11 +1433,10 @@ async function showDashboard(auth) {
   userAvatarEl.textContent = computeUserAvatarInitials(user);
 
   // Default tab
-  const allowedTabs = ["listings", "raions", "users", "types"];
   const initialTab =
-    autoOpenLastTab && allowedTabs.includes(lastTab)
+    autoOpenLastTab && APP_ALLOWED_TABS.includes(lastTab)
       ? lastTab
-      : (allowedTabs.includes(defaultStartTab) ? defaultStartTab : "listings");
+      : (APP_ALLOWED_TABS.includes(defaultStartTab) ? defaultStartTab : "listings");
   setActiveView(initialTab);
   await refreshForActiveTab();
   startAutoRefreshIfNeeded();
@@ -1716,8 +1720,7 @@ async function refreshSettingsPanel() {
     if (toastDurationSecSelect) {
       toastDurationSecSelect.value = String(Math.min(12, Math.max(2, Math.round(toastDurationSec))));
     }
-    const allowedTabs = ["listings", "raions", "users", "types"];
-    defaultStartTab = s.defaultStartTab && allowedTabs.includes(String(s.defaultStartTab)) ? String(s.defaultStartTab) : "listings";
+    defaultStartTab = s.defaultStartTab && APP_ALLOWED_TABS.includes(String(s.defaultStartTab)) ? String(s.defaultStartTab) : "listings";
     if (defaultStartTabSelect) defaultStartTabSelect.value = defaultStartTab;
     updateDefaultStartTabFieldState();
     if (settingsConnectionStatusEl) {
