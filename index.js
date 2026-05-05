@@ -3,7 +3,9 @@ const cors = require("cors");
 const mysql = require("mysql2/promise");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
+const crypto = require("crypto");
 const multer = require("multer");
+const nodemailer = require("nodemailer");
 const { S3Client, PutObjectCommand, DeleteObjectCommand } = require("@aws-sdk/client-s3");
 const path = require("path");
 require("dotenv").config();
@@ -29,6 +31,49 @@ const s3Client = new S3Client({
 
 const bucketName = process.env.S3_BUCKET || "a2c31109-3cf2c97b-aca1-42b0-a822-3e0ade279447";
 
+const gmailUser = "vasyaproger97@gmail.com";
+const gmailAppPassword = "beai hwha jfmz aavl".replace(/\s+/g, "");
+
+function createMailTransport() {
+  if (!gmailUser || !gmailAppPassword) return null;
+  return nodemailer.createTransport({
+    service: "gmail",
+    auth: {
+      user: gmailUser,
+      pass: gmailAppPassword,
+    },
+  });
+}
+
+const mailTransport = createMailTransport();
+
+function buildPasswordResetEmail({ fullName, resetLink }) {
+  const safeName = String(fullName || "пользователь");
+  return `
+    <div style="margin:0;padding:24px;background:#050816;font-family:Inter,Segoe UI,Arial,sans-serif;color:#e4e4e7;">
+      <div style="max-width:640px;margin:0 auto;border:1px solid rgba(255,255,255,.12);border-radius:22px;overflow:hidden;background:
+        radial-gradient(circle at 100% 0%,rgba(168,85,247,.22),transparent 45%),
+        radial-gradient(circle at 0% 100%,rgba(34,211,238,.16),transparent 45%),
+        linear-gradient(180deg,rgba(24,24,27,.92),rgba(9,9,11,.96));box-shadow:0 24px 80px -30px rgba(2,6,23,.9);">
+        <div style="padding:30px 30px 16px;">
+          <div style="display:inline-block;padding:6px 10px;border-radius:999px;border:1px solid rgba(255,255,255,.2);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#c4b5fd;">Kurut Security</div>
+          <h1 style="margin:14px 0 8px;font-size:28px;line-height:1.2;color:#fff;">Восстановление пароля</h1>
+          <p style="margin:0;color:#cbd5e1;font-size:14px;">Здравствуйте, ${safeName}. Мы получили запрос на смену пароля.</p>
+        </div>
+        <div style="padding:22px 30px 30px;">
+          <p style="margin:0 0 16px;color:#d4d4d8;font-size:14px;">Нажмите кнопку ниже, чтобы задать новый пароль. Ссылка действует <b>30 минут</b>.</p>
+          <a href="${resetLink}" style="display:inline-block;padding:12px 18px;border-radius:12px;background:linear-gradient(90deg,#7c3aed,#d946ef);color:#fff;text-decoration:none;font-weight:600;">Сбросить пароль</a>
+          <p style="margin:16px 0 6px;color:#71717a;font-size:12px;">Если кнопка не работает, откройте ссылку вручную:</p>
+          <p style="margin:0;word-break:break-all;color:#a1a1aa;font-size:12px;">${resetLink}</p>
+          <div style="margin-top:18px;padding-top:14px;border-top:1px solid rgba(255,255,255,.08);font-size:12px;color:#71717a;">
+            Если вы не запрашивали смену пароля, просто проигнорируйте это письмо.
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 
 
 
@@ -38,6 +83,11 @@ const corsOrigins = (process.env.FRONTEND_ORIGIN ||
   .split(",")
   .map((s) => s.trim())
   .filter(Boolean);
+
+const frontendResetBaseUrl =
+  String(process.env.FRONTEND_RESET_URL || "").trim() ||
+  corsOrigins[0] ||
+  "http://localhost:5173";
 
 app.use(
   cors({
@@ -455,6 +505,26 @@ async function testDatabaseConnection() {
       `);
     }
 
+    // Токены восстановления пароля
+    const [passwordResetTables] = await connection.execute("SHOW TABLES LIKE 'password_reset_tokens'");
+    if (passwordResetTables.length === 0) {
+      console.log("Creating password_reset_tokens table...");
+      await connection.execute(`
+        CREATE TABLE password_reset_tokens (
+          id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+          user_id INT UNSIGNED NOT NULL,
+          token_hash CHAR(64) NOT NULL,
+          expires_at DATETIME NOT NULL,
+          used_at DATETIME NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          INDEX idx_prt_user (user_id),
+          INDEX idx_prt_token_hash (token_hash),
+          INDEX idx_prt_expires_at (expires_at),
+          CONSTRAINT fk_prt_user FOREIGN KEY (user_id) REFERENCES users1(id) ON DELETE CASCADE
+        ) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci
+      `);
+    }
+
     // Setup admin user
     const adminEmail = process.env.ADMIN_EMAIL || "admin@example.com";
     const adminPassword = process.env.ADMIN_PASSWORD || "admin123";
@@ -511,6 +581,113 @@ app.get("/public/site-access", async (req, res) => {
     res.json({ active, validUntil: row.valid_until, maintenance });
   } catch (e) {
     res.json({ active: true, validUntil: null, maintenance: false });
+  }
+});
+
+app.post("/public/password-reset/request", async (req, res) => {
+  const email = String(req.body?.email ?? "").trim().toLowerCase();
+  if (!email) {
+    return res.status(400).json({ error: "Email обязателен" });
+  }
+
+  let connection;
+  try {
+    connection = await pool.getConnection();
+    const [users] = await connection.execute(
+      "SELECT id, email, first_name, last_name FROM users1 WHERE email = ? LIMIT 1",
+      [email]
+    );
+
+    // Всегда возвращаем одинаковый ответ, чтобы не раскрывать, есть ли email в базе.
+    if (users.length === 0 || !mailTransport) {
+      return res.json({ ok: true, message: "Если email существует, инструкция отправлена." });
+    }
+
+    const user = users[0];
+    const token = crypto.randomBytes(32).toString("hex");
+    const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+    const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 минут
+
+    await connection.execute(
+      "UPDATE password_reset_tokens SET used_at = NOW() WHERE user_id = ? AND used_at IS NULL",
+      [user.id]
+    );
+    await connection.execute(
+      "INSERT INTO password_reset_tokens (user_id, token_hash, expires_at) VALUES (?, ?, ?)",
+      [user.id, tokenHash, expiresAt]
+    );
+
+    const resetLink = `${frontendResetBaseUrl.replace(/\/$/, "")}/reset-password?token=${encodeURIComponent(token)}`;
+    const fullName = `${String(user.first_name || "").trim()} ${String(user.last_name || "").trim()}`.trim() || "пользователь";
+
+    const html = buildPasswordResetEmail({ fullName, resetLink });
+
+    await mailTransport.sendMail({
+      from: `"Kurut Security" <${gmailUser}>`,
+      to: user.email,
+      subject: "Kurut · Восстановление пароля",
+      text: `Ссылка для восстановления пароля: ${resetLink} (действует 30 минут)`,
+      html,
+    });
+
+    return res.json({ ok: true, message: "Если email существует, инструкция отправлена." });
+  } catch (error) {
+    console.error("POST /public/password-reset/request:", error);
+    return res.status(500).json({ error: `Внутренняя ошибка сервера: ${error.message}` });
+  } finally {
+    if (connection) connection.release();
+  }
+});
+
+app.post("/public/password-reset/confirm", async (req, res) => {
+  const token = String(req.body?.token ?? "").trim();
+  const password = String(req.body?.password ?? "");
+  if (!token || !password) {
+    return res.status(400).json({ error: "token и password обязательны" });
+  }
+  if (password.length < 8) {
+    return res.status(400).json({ error: "Пароль должен быть не короче 8 символов" });
+  }
+
+  let connection;
+  try {
+    const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+    connection = await pool.getConnection();
+    const [rows] = await connection.execute(
+      `SELECT id, user_id, expires_at, used_at
+       FROM password_reset_tokens
+       WHERE token_hash = ?
+       ORDER BY id DESC
+       LIMIT 1`,
+      [tokenHash]
+    );
+    if (rows.length === 0) {
+      return res.status(400).json({ error: "Токен недействителен" });
+    }
+    const row = rows[0];
+    if (row.used_at) {
+      return res.status(400).json({ error: "Токен уже использован" });
+    }
+    if (new Date(row.expires_at).getTime() <= Date.now()) {
+      return res.status(400).json({ error: "Срок действия токена истёк" });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    await connection.beginTransaction();
+    await connection.execute("UPDATE users1 SET password = ?, token = NULL WHERE id = ?", [hashedPassword, row.user_id]);
+    await connection.execute("UPDATE password_reset_tokens SET used_at = NOW() WHERE id = ?", [row.id]);
+    await connection.commit();
+    return res.json({ ok: true, message: "Пароль успешно обновлён" });
+  } catch (error) {
+    if (connection) {
+      try {
+        await connection.rollback();
+      } catch (_) {}
+    }
+    console.error("POST /public/password-reset/confirm:", error);
+    return res.status(500).json({ error: `Внутренняя ошибка сервера: ${error.message}` });
+  } finally {
+    if (connection) connection.release();
   }
 });
 
@@ -620,8 +797,40 @@ app.get("/api/dev/health", authenticate, async (req, res) => {
     uptimeSec: process.uptime(),
     env: process.env.NODE_ENV || "development",
     db,
+    mail: mailTransport ? "configured" : "not_configured",
     node: process.version,
   });
+});
+
+// Отправка тестового письма (SUPER_ADMIN only)
+app.post("/api/dev/mail/test", authenticate, async (req, res) => {
+  if (req.user.role !== "SUPER_ADMIN") {
+    return res.status(403).json({ error: "Доступ запрещён: требуется роль SUPER_ADMIN" });
+  }
+  if (!mailTransport) {
+    return res.status(400).json({ error: "Почта не настроена. Укажите GMAIL_USER и GMAIL_APP_PASSWORD в .env" });
+  }
+
+  const to = String(req.body?.to ?? "").trim();
+  const subject = String(req.body?.subject ?? "Kurut test email").trim().slice(0, 255);
+  const text = String(req.body?.text ?? "Проверка SMTP: письмо отправлено успешно.").trim().slice(0, 5000);
+
+  if (!to) {
+    return res.status(400).json({ error: "Поле to обязательно" });
+  }
+
+  try {
+    const info = await mailTransport.sendMail({
+      from: `"Kurut Backend" <${gmailUser}>`,
+      to,
+      subject,
+      text,
+    });
+    res.json({ ok: true, messageId: info.messageId, accepted: info.accepted || [] });
+  } catch (error) {
+    console.error("POST /api/dev/mail/test:", error);
+    res.status(500).json({ error: `Не удалось отправить письмо: ${error.message}` });
+  }
 });
 
 // Admin Login Endpoint
@@ -2401,7 +2610,7 @@ app.get("/api/listings", authenticate, async (req, res) => {
 
 // Get Variants (Properties) with optional filtering for "all" or "mine"
 // REALTOR: всегда только объекты, где curator_id = текущий пользователь (не видит чужие)
-// mode=mine: для SUPER_ADMIN — без доп. фильтра; для REALTOR — то же самое, что и mode=all
+// mode=mine: для SUPER_ADMIN/ADMIN — только объекты, где curator_id = текущий пользователь
 // mode=all: SUPER_ADMIN / прочие роли (кроме REALTOR) — все объекты
 // Optional: id query param to filter by property id
 app.get("/api/variants", authenticate, async (req, res) => {
@@ -2438,6 +2647,8 @@ app.get("/api/variants", authenticate, async (req, res) => {
       if (!["SUPER_ADMIN", "ADMIN"].includes(req.user.role)) {
         return res.status(403).json({ error: "Доступ запрещён" });
       }
+      whereParts.push("p.curator_id = ?");
+      params.push(req.user.id);
     }
 
     const whereSql = whereParts.join(" AND ");
