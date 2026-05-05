@@ -32,27 +32,28 @@ const bucketName = process.env.S3_BUCKET || "a2c31109-3cf2c97b-aca1-42b0-a822-3e
 
 
 
-app.use(cors({
-  origin: 'https://kurutnet.online', // Explicitly allow your frontend origin
-  credentials: true, // Allow credentials (cookies, authorization headers)
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-}));
+const corsOrigins = (process.env.FRONTEND_ORIGIN ||
+  "http://localhost:5173,http://127.0.0.1:5173,http://localhost:4173,https://kurutnet.online"
+)
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+
+app.use(
+  cors({
+    origin(origin, cb) {
+      const ok = !origin || corsOrigins.includes(origin);
+      cb(null, ok);
+    },
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+  })
+);
 
 
 // JSON Middleware
 app.use(express.json());
-
-// Global Error Handler
-app.use((err, req, res, next) => {
-  console.error("Global error:", {
-    message: err.message,
-    stack: err.stack,
-    path: req.path,
-    method: req.method
-  });
-  res.status(500).json({ error: `Внутренняя ошибка сервера: ${err.message}` });
-});
 
 // Multer Configuration
 const storage = multer.memoryStorage();
@@ -89,15 +90,73 @@ const upload = multer({
 
 // MySQL Connection Pool
 const dbConfig = {
-  host: process.env.DB_HOST || "vh446.timeweb.ru",
-  user: process.env.DB_USER || "cz45780_kururtne",
-  password: process.env.DB_PASSWORD || "Vasya11091109",
-  database: process.env.DB_NAME || "cz45780_kururtne",
-  port: process.env.DB_PORT || 3306,
+  host: "vh446.timeweb.ru",
+  user: "cz45780_kururtne",
+  password: "Vasya11091109",
+  database: "cz45780_kururtne",
+  port: 3306,
   connectionLimit: 10,
 };
 const pool = mysql.createPool(dbConfig);
 
+/** Глобальная подписка / оплата: до какой даты сервис доступен (кроме SUPER_ADMIN) */
+let siteSubscriptionCache = { at: 0, row: null };
+const SITE_SUB_CACHE_MS = 8000;
+
+async function getSiteSubscription() {
+  const t = Date.now();
+  if (siteSubscriptionCache.row != null && t - siteSubscriptionCache.at < SITE_SUB_CACHE_MS) {
+    return siteSubscriptionCache.row;
+  }
+  let connection;
+  try {
+    connection = await pool.getConnection();
+    const [rows] = await connection.execute(
+      "SELECT valid_until, payment_amount, payment_currency, payment_note, maintenance_mode FROM site_subscription WHERE id = 1"
+    );
+    const row =
+      rows.length > 0
+        ? rows[0]
+        : { valid_until: null, payment_amount: null, payment_currency: "USD", payment_note: null, maintenance_mode: 0 };
+    siteSubscriptionCache = { at: Date.now(), row };
+    return row;
+  } catch (e) {
+    const fallback = { valid_until: null, payment_amount: null, payment_currency: "USD", payment_note: null, maintenance_mode: 0 };
+    siteSubscriptionCache = { at: Date.now(), row: fallback };
+    return fallback;
+  } finally {
+    if (connection) connection.release();
+  }
+}
+
+function invalidateSiteSubscriptionCache() {
+  siteSubscriptionCache = { at: 0, row: null };
+}
+
+async function siteSubscriptionAllowsRequest(req, res) {
+  if (!req.user || req.user.role === "SUPER_ADMIN") return true;
+  if (req.path === "/api/logout") return true;
+  if (req.path === "/api/me") return true;
+  const row = await getSiteSubscription();
+  if (Number(row.maintenance_mode) === 1) {
+    res.status(503).json({
+      error: "Сервис временно недоступен: включён режим обслуживания.",
+      code: "SITE_MAINTENANCE_MODE",
+    });
+    return false;
+  }
+  if (!row.valid_until) return true;
+  if (new Date(row.valid_until).getTime() <= Date.now()) {
+    res.status(402).json({
+      error:
+        "Срок доступа к сервису истёк. Продлите подписку в зоне разработчика (Developer Zone) или обратитесь к владельцу.",
+      code: "SITE_SUBSCRIPTION_EXPIRED",
+      validUntil: row.valid_until,
+    });
+    return false;
+  }
+  return true;
+}
 
 app.use('/images', express.static(path.join(__dirname, 'public/images')));
 
@@ -137,6 +196,7 @@ const authenticate = async (req, res, next) => {
 
     connection.release();
     req.user = { ...decoded, first_name: users[0].first_name, last_name: users[0].last_name };
+    if (!(await siteSubscriptionAllowsRequest(req, res))) return;
     next();
   } catch (error) {
     // Fallback: if JWT verification fails but token exists in DB,
@@ -156,6 +216,7 @@ const authenticate = async (req, res, next) => {
           first_name: users[0].first_name,
           last_name: users[0].last_name,
         };
+        if (!(await siteSubscriptionAllowsRequest(req, res))) return;
         return next();
       }
     } catch (e) {
@@ -331,6 +392,69 @@ async function testDatabaseConnection() {
       `);
     }
 
+    // Подписка / срок доступа к CRM (одна строка id=1)
+    const [subscrTables] = await connection.execute("SHOW TABLES LIKE 'site_subscription'");
+    if (subscrTables.length === 0) {
+      console.log("Creating site_subscription table...");
+      await connection.execute(`
+        CREATE TABLE site_subscription (
+          id INT UNSIGNED NOT NULL PRIMARY KEY,
+          valid_until DATETIME NULL,
+          payment_amount DECIMAL(12,2) NULL,
+          payment_currency VARCHAR(8) NOT NULL DEFAULT 'USD',
+          payment_note VARCHAR(512) NULL,
+          maintenance_mode TINYINT(1) NOT NULL DEFAULT 0,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci
+      `);
+      await connection.execute(
+        "INSERT INTO site_subscription (id, valid_until, payment_amount, payment_currency, payment_note, maintenance_mode) VALUES (1, NULL, NULL, 'USD', NULL, 0)"
+      );
+    }
+    // Миграция старых БД: отдельный флаг "сайт на обслуживании"
+    try {
+      await connection.execute(
+        "ALTER TABLE site_subscription ADD COLUMN maintenance_mode TINYINT(1) NOT NULL DEFAULT 0"
+      );
+    } catch (e) {
+      // Игнорируем, если колонка уже существует
+    }
+
+    // Уведомления для личного кабинета
+    const [notificationTables] = await connection.execute("SHOW TABLES LIKE 'notifications'");
+    if (notificationTables.length === 0) {
+      console.log("Creating notifications table...");
+      await connection.execute(`
+        CREATE TABLE notifications (
+          id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+          title VARCHAR(255) NOT NULL,
+          message TEXT NOT NULL,
+          level VARCHAR(16) NOT NULL DEFAULT 'info',
+          created_by INT UNSIGNED NULL,
+          target_role VARCHAR(32) NOT NULL DEFAULT 'ALL',
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          INDEX idx_notifications_created_at (created_at),
+          INDEX idx_notifications_target_role (target_role)
+        ) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci
+      `);
+    }
+
+    const [notificationReadsTables] = await connection.execute("SHOW TABLES LIKE 'notification_reads'");
+    if (notificationReadsTables.length === 0) {
+      console.log("Creating notification_reads table...");
+      await connection.execute(`
+        CREATE TABLE notification_reads (
+          id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+          user_id INT UNSIGNED NOT NULL,
+          notification_id INT UNSIGNED NOT NULL,
+          read_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE KEY uk_user_notification (user_id, notification_id),
+          INDEX idx_notification_reads_user (user_id),
+          FOREIGN KEY (notification_id) REFERENCES notifications(id) ON DELETE CASCADE
+        ) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci
+      `);
+    }
+
     // Setup admin user
     const adminEmail = process.env.ADMIN_EMAIL || "admin@example.com";
     const adminPassword = process.env.ADMIN_PASSWORD || "admin123";
@@ -373,6 +497,133 @@ app.get("/api/message", (req, res) => {
   res.json({ message: "Hello from Ala-Too backend!" });
 });
 
+// Публичная проверка, что фронт попал на этот инстанс API (без авторизации)
+app.get("/public/dev/ping", (req, res) => {
+  res.json({ ok: true, service: "kurut-api", ts: Date.now() });
+});
+
+// Публичный статус доступа к сайту (для баннера / гейта на фронте)
+app.get("/public/site-access", async (req, res) => {
+  try {
+    const row = await getSiteSubscription();
+    const maintenance = Number(row.maintenance_mode) === 1;
+    const active = !row.valid_until || new Date(row.valid_until).getTime() > Date.now();
+    res.json({ active, validUntil: row.valid_until, maintenance });
+  } catch (e) {
+    res.json({ active: true, validUntil: null, maintenance: false });
+  }
+});
+
+// Чтение / запись подписки (только SUPER_ADMIN)
+app.get("/api/dev/site-access", authenticate, async (req, res) => {
+  if (req.user.role !== "SUPER_ADMIN") {
+    return res.status(403).json({ error: "Доступ запрещён: требуется роль SUPER_ADMIN" });
+  }
+  try {
+    const row = await getSiteSubscription();
+    const maintenance = Number(row.maintenance_mode) === 1;
+    const active = !row.valid_until || new Date(row.valid_until).getTime() > Date.now();
+    res.json({
+      active,
+      validUntil: row.valid_until,
+      payment_amount: row.payment_amount != null ? Number(row.payment_amount) : null,
+      payment_currency: row.payment_currency || "USD",
+      payment_note: row.payment_note || null,
+      maintenance_mode: maintenance,
+    });
+  } catch (error) {
+    console.error("GET /api/dev/site-access:", error);
+    res.status(500).json({ error: `Внутренняя ошибка сервера: ${error.message}` });
+  }
+});
+
+app.put("/api/dev/site-access", authenticate, async (req, res) => {
+  if (req.user.role !== "SUPER_ADMIN") {
+    return res.status(403).json({ error: "Доступ запрещён: требуется роль SUPER_ADMIN" });
+  }
+
+  const { valid_until, payment_amount, payment_currency, payment_note, maintenance_mode } = req.body || {};
+  let validUntilSql = null;
+  if (valid_until !== undefined && valid_until !== null && String(valid_until).trim() !== "") {
+    const d = new Date(valid_until);
+    if (Number.isNaN(d.getTime())) {
+      return res.status(400).json({ error: "Некорректная дата valid_until" });
+    }
+    validUntilSql = d;
+  }
+
+  let amount = null;
+  if (payment_amount !== undefined && payment_amount !== null && String(payment_amount).trim() !== "") {
+    const n = Number(String(payment_amount).replace(",", "."));
+    if (!Number.isFinite(n)) {
+      return res.status(400).json({ error: "payment_amount должен быть числом" });
+    }
+    amount = n;
+  }
+
+  const currency =
+    payment_currency != null && String(payment_currency).trim() !== ""
+      ? String(payment_currency).trim().slice(0, 8)
+      : "USD";
+  const note =
+    payment_note != null && String(payment_note).trim() !== "" ? String(payment_note).trim().slice(0, 512) : null;
+  const maintenanceMode = maintenance_mode === true || Number(maintenance_mode) === 1 ? 1 : 0;
+
+  let connection;
+  try {
+    connection = await pool.getConnection();
+    await connection.execute(
+      "UPDATE site_subscription SET valid_until = ?, payment_amount = ?, payment_currency = ?, payment_note = ?, maintenance_mode = ? WHERE id = 1",
+      [validUntilSql, amount, currency, note, maintenanceMode]
+    );
+    invalidateSiteSubscriptionCache();
+    const row = await getSiteSubscription();
+    const maintenance = Number(row.maintenance_mode) === 1;
+    const active = !row.valid_until || new Date(row.valid_until).getTime() > Date.now();
+    res.json({
+      active,
+      validUntil: row.valid_until,
+      payment_amount: row.payment_amount != null ? Number(row.payment_amount) : null,
+      payment_currency: row.payment_currency || "USD",
+      payment_note: row.payment_note || null,
+      maintenance_mode: maintenance,
+    });
+  } catch (error) {
+    console.error("PUT /api/dev/site-access:", error);
+    res.status(500).json({ error: `Внутренняя ошибка сервера: ${error.message}` });
+  } finally {
+    if (connection) connection.release();
+  }
+});
+
+// Developer health endpoint (Protected, SUPER_ADMIN only)
+app.get("/api/dev/health", authenticate, async (req, res) => {
+  if (req.user.role !== "SUPER_ADMIN") {
+    return res.status(403).json({ error: "Доступ запрещён: требуется роль SUPER_ADMIN" });
+  }
+
+  let connection;
+  let db = "down";
+  try {
+    connection = await pool.getConnection();
+    await connection.execute("SELECT 1");
+    db = "up";
+  } catch (error) {
+    db = "down";
+  } finally {
+    if (connection) connection.release();
+  }
+
+  res.json({
+    ok: true,
+    now: new Date().toISOString(),
+    uptimeSec: process.uptime(),
+    env: process.env.NODE_ENV || "development",
+    db,
+    node: process.version,
+  });
+});
+
 // Admin Login Endpoint
 app.post("/api/admin/login", async (req, res) => {
   const { email, password } = req.body;
@@ -399,6 +650,25 @@ app.post("/api/admin/login", async (req, res) => {
       return res.status(401).json({ error: "Недействительный пароль" });
     }
 
+    if (user.role !== "SUPER_ADMIN") {
+      const sub = await getSiteSubscription();
+      if (Number(sub.maintenance_mode) === 1) {
+        return res.status(503).json({
+          error:
+            "Сервис временно недоступен: включён режим обслуживания. Дождитесь завершения работ или обратитесь к разработчику.",
+          code: "SITE_MAINTENANCE_MODE",
+        });
+      }
+      if (sub.valid_until && new Date(sub.valid_until).getTime() <= Date.now()) {
+        return res.status(402).json({
+          error:
+            "Срок доступа к сервису истёк. Продлите подписку в Developer Zone (разработчик) или обратитесь к владельцу.",
+          code: "SITE_SUBSCRIPTION_EXPIRED",
+          validUntil: sub.valid_until,
+        });
+      }
+    }
+
     const token = jwt.sign({ id: user.id, role: user.role }, jwtSecret, { expiresIn: "30d" });
     await connection.execute("UPDATE users1 SET token = ? WHERE id = ?", [token, user.id]);
 
@@ -420,6 +690,154 @@ app.post("/api/admin/login", async (req, res) => {
       message: error.message,
       stack: error.stack
     });
+    res.status(500).json({ error: `Внутренняя ошибка сервера: ${error.message}` });
+  } finally {
+    if (connection) connection.release();
+  }
+});
+
+// Рассылка уведомления всем пользователям из зоны разработчика
+app.post("/api/dev/notifications/broadcast", authenticate, async (req, res) => {
+  if (req.user.role !== "SUPER_ADMIN") {
+    return res.status(403).json({ error: "Доступ запрещён: требуется роль SUPER_ADMIN" });
+  }
+
+  const title = String(req.body?.title ?? "").trim();
+  const message = String(req.body?.message ?? "").trim();
+  const levelRaw = String(req.body?.level ?? "info").trim().toLowerCase();
+  const targetRoleRaw = String(req.body?.target_role ?? "ALL").trim().toUpperCase();
+  const level = ["info", "success", "warning", "error"].includes(levelRaw) ? levelRaw : "info";
+  const targetRole =
+    targetRoleRaw === "ALL" || VALID_ROLES.includes(targetRoleRaw) ? targetRoleRaw : "ALL";
+
+  if (!title || !message) {
+    return res.status(400).json({ error: "title и message обязательны" });
+  }
+
+  let connection;
+  try {
+    connection = await pool.getConnection();
+    const [result] = await connection.execute(
+      "INSERT INTO notifications (title, message, level, created_by, target_role) VALUES (?, ?, ?, ?, ?)",
+      [title.slice(0, 255), message.slice(0, 5000), level, req.user.id, targetRole]
+    );
+    const notificationId = result.insertId;
+    const [rows] = await connection.execute("SELECT id, title, message, level, target_role, created_at FROM notifications WHERE id = ?", [
+      notificationId,
+    ]);
+    const row = rows[0];
+    res.status(201).json({
+      id: row.id,
+      title: row.title,
+      message: row.message,
+      level: row.level,
+      target_role: row.target_role,
+      created_at: row.created_at,
+    });
+  } catch (error) {
+    console.error("POST /api/dev/notifications/broadcast:", error);
+    res.status(500).json({ error: `Внутренняя ошибка сервера: ${error.message}` });
+  } finally {
+    if (connection) connection.release();
+  }
+});
+
+// Current user (JWT)
+app.get("/api/me", authenticate, async (req, res) => {
+  let connection;
+  try {
+    connection = await pool.getConnection();
+    const [rows] = await connection.execute(
+      "SELECT id, first_name, last_name, email, phone, role, profile_picture AS photoUrl FROM users1 WHERE id = ?",
+      [req.user.id]
+    );
+    if (rows.length === 0) {
+      return res.status(404).json({ error: "Пользователь не найден" });
+    }
+    const u = rows[0];
+    res.json({
+      id: u.id,
+      first_name: u.first_name,
+      last_name: u.last_name,
+      email: u.email,
+      phone: u.phone,
+      role: u.role,
+      photoUrl: u.photoUrl
+        ? `https://s3.twcstorage.ru/${bucketName}/${u.photoUrl}`
+        : null,
+      name: `${u.first_name} ${u.last_name}`.trim(),
+    });
+  } catch (error) {
+    console.error("GET /api/me error:", error);
+    res
+      .status(500)
+      .json({ error: `Внутренняя ошибка сервера: ${error.message}` });
+  } finally {
+    if (connection) connection.release();
+  }
+});
+
+// Личные уведомления текущего пользователя
+app.get("/api/notifications", authenticate, async (req, res) => {
+  let connection;
+  try {
+    connection = await pool.getConnection();
+    const role = String(req.user.role || "").toUpperCase();
+    const [rows] = await connection.execute(
+      `
+      SELECT
+        n.id,
+        n.title,
+        n.message,
+        n.level,
+        n.target_role,
+        n.created_at,
+        CASE WHEN nr.id IS NULL THEN 0 ELSE 1 END AS is_read
+      FROM notifications n
+      LEFT JOIN notification_reads nr
+        ON nr.notification_id = n.id
+       AND nr.user_id = ?
+      WHERE n.target_role = 'ALL' OR n.target_role = ?
+      ORDER BY n.created_at DESC
+      LIMIT 30
+      `,
+      [req.user.id, role]
+    );
+    res.json(
+      rows.map((r) => ({
+        id: r.id,
+        title: r.title,
+        message: r.message,
+        level: r.level || "info",
+        target_role: r.target_role || "ALL",
+        created_at: r.created_at,
+        is_read: Number(r.is_read) === 1,
+      }))
+    );
+  } catch (error) {
+    console.error("GET /api/notifications:", error);
+    res.status(500).json({ error: `Внутренняя ошибка сервера: ${error.message}` });
+  } finally {
+    if (connection) connection.release();
+  }
+});
+
+app.post("/api/notifications/:id/read", authenticate, async (req, res) => {
+  const notificationId = Number(req.params.id);
+  if (!Number.isFinite(notificationId) || notificationId <= 0) {
+    return res.status(400).json({ error: "Некорректный id уведомления" });
+  }
+
+  let connection;
+  try {
+    connection = await pool.getConnection();
+    await connection.execute(
+      "INSERT IGNORE INTO notification_reads (user_id, notification_id) VALUES (?, ?)",
+      [req.user.id, notificationId]
+    );
+    res.json({ ok: true });
+  } catch (error) {
+    console.error("POST /api/notifications/:id/read:", error);
     res.status(500).json({ error: `Внутренняя ошибка сервера: ${error.message}` });
   } finally {
     if (connection) connection.release();
@@ -2944,6 +3362,17 @@ app.patch("/api/properties/redirect", authenticate, async (req, res) => {
   } finally {
     if (connection) connection.release();
   }
+});
+
+// Global error handler — только после всех маршрутов
+app.use((err, req, res, next) => {
+  console.error("Global error:", {
+    message: err.message,
+    stack: err.stack,
+    path: req.path,
+    method: req.method
+  });
+  res.status(500).json({ error: `Внутренняя ошибка сервера: ${err.message}` });
 });
 
 // Start Server
