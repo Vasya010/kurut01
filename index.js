@@ -33,11 +33,19 @@ const bucketName = process.env.S3_BUCKET || "a2c31109-3cf2c97b-aca1-42b0-a822-3e
 
 const gmailUser = "vasyaproger97@gmail.com";
 const gmailAppPassword = "beai hwha jfmz aavl".replace(/\s+/g, "");
+const resendApiKey = "";
+const resendFrom = "Kurut Security <onboarding@resend.dev>";
 
 function createMailTransport() {
   if (!gmailUser || !gmailAppPassword) return null;
   return nodemailer.createTransport({
     service: "gmail",
+    pool: true,
+    maxConnections: 2,
+    maxMessages: 100,
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 15000,
     auth: {
       user: gmailUser,
       pass: gmailAppPassword,
@@ -46,6 +54,44 @@ function createMailTransport() {
 }
 
 const mailTransport = createMailTransport();
+
+async function sendMailSmart({ to, subject, text, html }) {
+  if (resendApiKey) {
+    try {
+      const response = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${resendApiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          from: resendFrom,
+          to: [to],
+          subject,
+          text,
+          html,
+        }),
+      });
+      if (response.ok) return { provider: "resend" };
+      const body = await response.text();
+      console.error("Resend send error:", response.status, body);
+    } catch (e) {
+      console.error("Resend request failed:", e);
+    }
+  }
+
+  if (!mailTransport) {
+    throw new Error("No mail provider configured");
+  }
+  await mailTransport.sendMail({
+    from: `"Kurut Security" <${gmailUser}>`,
+    to,
+    subject,
+    text,
+    html,
+  });
+  return { provider: "gmail_smtp" };
+}
 
 function buildPasswordResetEmail({ fullName, resetLink }) {
   const safeName = String(fullName || "пользователь");
@@ -599,7 +645,7 @@ app.post("/public/password-reset/request", async (req, res) => {
     );
 
     // Всегда возвращаем одинаковый ответ, чтобы не раскрывать, есть ли email в базе.
-    if (users.length === 0 || !mailTransport) {
+    if (users.length === 0 || (!mailTransport && !resendApiKey)) {
       return res.json({ ok: true, message: "Если email существует, инструкция отправлена." });
     }
 
@@ -622,15 +668,22 @@ app.post("/public/password-reset/request", async (req, res) => {
 
     const html = buildPasswordResetEmail({ fullName, resetLink });
 
-    await mailTransport.sendMail({
-      from: `"Kurut Security" <${gmailUser}>`,
-      to: user.email,
-      subject: "Kurut · Восстановление пароля",
-      text: `Ссылка для восстановления пароля: ${resetLink} (действует 30 минут)`,
-      html,
+    // Отвечаем сразу, а отправку выполняем в фоне — UI не ждёт SMTP.
+    res.json({ ok: true, message: "Если email существует, инструкция отправлена." });
+    setImmediate(async () => {
+      try {
+        const sent = await sendMailSmart({
+          to: user.email,
+          subject: "Kurut · Восстановление пароля",
+          text: `Ссылка для восстановления пароля: ${resetLink} (действует 30 минут)`,
+          html,
+        });
+        console.log(`Password reset email sent via ${sent.provider} to ${user.email}`);
+      } catch (mailErr) {
+        console.error("Background reset email error:", mailErr);
+      }
     });
-
-    return res.json({ ok: true, message: "Если email существует, инструкция отправлена." });
+    return;
   } catch (error) {
     console.error("POST /public/password-reset/request:", error);
     return res.status(500).json({ error: `Внутренняя ошибка сервера: ${error.message}` });
