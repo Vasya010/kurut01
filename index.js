@@ -101,6 +101,14 @@ async function sendMailSmart({ to, subject, text, html }) {
   return { provider: "gmail_smtp" };
 }
 
+function getMailProviderStatus() {
+  return {
+    preferred: resendApiKey ? "resend" : "gmail_smtp",
+    resend_configured: Boolean(resendApiKey),
+    smtp_configured: Boolean(mailTransport),
+  };
+}
+
 function buildPasswordResetEmail({ fullName, resetLink }) {
   const safeName = String(fullName || "пользователь");
   return `
@@ -858,7 +866,7 @@ app.get("/api/dev/health", authenticate, async (req, res) => {
     uptimeSec: process.uptime(),
     env: process.env.NODE_ENV || "development",
     db,
-    mail: mailTransport ? "configured" : "not_configured",
+    mail: getMailProviderStatus(),
     node: process.version,
   });
 });
@@ -868,8 +876,8 @@ app.post("/api/dev/mail/test", authenticate, async (req, res) => {
   if (req.user.role !== "SUPER_ADMIN") {
     return res.status(403).json({ error: "Доступ запрещён: требуется роль SUPER_ADMIN" });
   }
-  if (!mailTransport) {
-    return res.status(400).json({ error: "Почта не настроена. Укажите GMAIL_USER и GMAIL_APP_PASSWORD в .env" });
+  if (!mailTransport && !resendApiKey) {
+    return res.status(400).json({ error: "Почта не настроена. Укажите SMTP_* или RESEND_API_KEY в окружении" });
   }
 
   const to = String(req.body?.to ?? "").trim();
@@ -881,13 +889,19 @@ app.post("/api/dev/mail/test", authenticate, async (req, res) => {
   }
 
   try {
-    const info = await mailTransport.sendMail({
-      from: `"Kurut Backend" <${gmailUser}>`,
+    const html = `
+      <div style="font-family:Inter,Segoe UI,Arial,sans-serif;padding:20px;background:#0b1020;color:#e5e7eb;">
+        <h2 style="margin:0 0 8px;">Kurut · SMTP test</h2>
+        <p style="margin:0;">${text}</p>
+      </div>
+    `;
+    const sent = await sendMailSmart({
       to,
       subject,
       text,
+      html,
     });
-    res.json({ ok: true, messageId: info.messageId, accepted: info.accepted || [] });
+    res.json({ ok: true, provider: sent.provider });
   } catch (error) {
     console.error("POST /api/dev/mail/test:", error);
     res.status(500).json({ error: `Не удалось отправить письмо: ${error.message}` });
