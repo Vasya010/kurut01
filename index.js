@@ -31,16 +31,16 @@ const s3Client = new S3Client({
 
 const bucketName = process.env.S3_BUCKET || "a2c31109-3cf2c97b-aca1-42b0-a822-3e0ade279447";
 
-// SMTP config (как в вашем скрине)
-const smtpHost = "smtp.gmail.com";
-const smtpPort = 465;
-const smtpSecure = true; // SSL
-const smtpUsername = "vasyaproger97@gmail.com";
-const smtpPassword = "beai hwha jfmz aavl".replace(/\s+/g, "");
-const smtpFromEmail = "vasyaproger97@gmail.com";
-const smtpFromName = "Kurut Security";
-const resendApiKey = "";
-const resendFrom = "Kurut Security <onboarding@resend.dev>";
+// SMTP config (через env)
+const smtpHost = String(process.env.SMTP_HOST || "smtp.gmail.com").trim();
+const smtpPort = Number(process.env.SMTP_PORT || 465);
+const smtpSecure = String(process.env.SMTP_SECURE || process.env.SMTP_SECUR || "true").trim().toLowerCase() === "true";
+const smtpUsername = String(process.env.SMTP_USERNAME || process.env.SMTP_USER || process.env.GMAIL_USER || "").trim();
+const smtpPassword = String(process.env.SMTP_PASSWORD || process.env.GMAIL_APP_PASSWORD || "").replace(/\s+/g, "");
+const smtpFromEmail = String(process.env.SMTP_FROM_EMAIL || smtpUsername || "").trim();
+const smtpFromName = String(process.env.SMTP_FROM_NAME || "Kurut Security").trim();
+const resendApiKey = String(process.env.RESEND_API_KEY || "").trim();
+const resendFrom = String(process.env.RESEND_FROM || "").trim() || "Kurut Security <onboarding@resend.dev>";
 
 function createMailTransport() {
   if (!smtpUsername || !smtpPassword) return null;
