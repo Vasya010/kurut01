@@ -31,18 +31,23 @@ const s3Client = new S3Client({
 
 const bucketName = process.env.S3_BUCKET || "a2c31109-3cf2c97b-aca1-42b0-a822-3e0ade279447";
 
-const gmailUser = "vasyaproger97@gmail.com";
-const gmailAppPassword = "beai hwha jfmz aavl".replace(/\s+/g, "");
+// SMTP config (как в вашем скрине)
+const smtpHost = "smtp.gmail.com";
+const smtpPort = 465;
+const smtpSecure = true; // SSL
+const smtpUsername = "vasyaproger97@gmail.com";
+const smtpPassword = "beai hwha jfmz aavl".replace(/\s+/g, "");
+const smtpFromEmail = "vasyaproger97@gmail.com";
+const smtpFromName = "Kurut Security";
 const resendApiKey = "";
 const resendFrom = "Kurut Security <onboarding@resend.dev>";
 
 function createMailTransport() {
-  if (!gmailUser || !gmailAppPassword) return null;
+  if (!smtpUsername || !smtpPassword) return null;
   return nodemailer.createTransport({
-    host: "smtp.gmail.com",
-    port: 587,
-    secure: false,
-    requireTLS: true,
+    host: smtpHost,
+    port: smtpPort,
+    secure: smtpSecure,
     pool: true,
     maxConnections: 2,
     maxMessages: 100,
@@ -50,8 +55,8 @@ function createMailTransport() {
     greetingTimeout: 10000,
     socketTimeout: 15000,
     auth: {
-      user: gmailUser,
-      pass: gmailAppPassword,
+      user: smtpUsername,
+      pass: smtpPassword,
     },
   });
 }
@@ -87,7 +92,7 @@ async function sendMailSmart({ to, subject, text, html }) {
     throw new Error("No mail provider configured");
   }
   await mailTransport.sendMail({
-    from: `"Kurut Security" <${gmailUser}>`,
+    from: `"${smtpFromName}" <${smtpFromEmail}>`,
     to,
     subject,
     text,
