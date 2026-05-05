@@ -39,7 +39,10 @@ const resendFrom = "Kurut Security <onboarding@resend.dev>";
 function createMailTransport() {
   if (!gmailUser || !gmailAppPassword) return null;
   return nodemailer.createTransport({
-    service: "gmail",
+    host: "smtp.gmail.com",
+    port: 587,
+    secure: false,
+    requireTLS: true,
     pool: true,
     maxConnections: 2,
     maxMessages: 100,
