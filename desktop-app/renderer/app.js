@@ -459,6 +459,10 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
+function normalizeComparableText(value) {
+  return String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
 /** Сравнение semver-подобных строк (1.2.3); только числовые сегменты по точкам */
 function compareSemver(a, b) {
   const parse = (v) =>
@@ -2993,6 +2997,28 @@ if (createVariantForm) {
       setHidden(createVariantError, false);
       shakeElement(createVariantForm);
       return;
+    }
+
+    try {
+      const variants = await window.desktopApi.getVariants("all");
+      const normalizedAddress = normalizeComparableText(address);
+      const editingId = Number(variantEditPropertyId);
+      const duplicate = (Array.isArray(variants) ? variants : []).find((row) => {
+        if (!row) return false;
+        const rowId = Number(row.id);
+        if (Number.isFinite(editingId) && Number.isFinite(rowId) && rowId === editingId) return false;
+        return normalizeComparableText(row.district) === normalizedAddress;
+      });
+      if (duplicate) {
+        const message = `Вариант с таким адресом уже существует (ID ${duplicate.id})`;
+        createVariantError.textContent = message;
+        setHidden(createVariantError, false);
+        shakeElement(createVariantForm);
+        toast("Дубликат", message, "danger");
+        return;
+      }
+    } catch {
+      // Если не удалось свериться со списком, окончательную валидацию выполнит бэкенд.
     }
 
     const payload = {

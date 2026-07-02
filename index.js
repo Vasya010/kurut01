@@ -41,6 +41,8 @@ const smtpFromEmail = String(process.env.SMTP_FROM_EMAIL || smtpUsername || "").
 const smtpFromName = String(process.env.SMTP_FROM_NAME || "Kurut Security").trim();
 const resendApiKey = String(process.env.RESEND_API_KEY || "").trim();
 const resendFrom = String(process.env.RESEND_FROM || "").trim() || "Kurut Security <onboarding@resend.dev>";
+const passwordResetReturnLink =
+  String(process.env.PASSWORD_RESET_RETURN_LINK || "true").trim().toLowerCase() === "true";
 
 function createMailTransport() {
   if (!smtpUsername || !smtpPassword) return null;
@@ -210,6 +212,29 @@ const dbConfig = {
   connectionLimit: 10,
 };
 const pool = mysql.createPool(dbConfig);
+
+function normalizeComparableText(value) {
+  return String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+async function findDuplicateProperty(connection, { typeId, address, etaj, etajnost, excludeId = null }) {
+  const params = [typeId, normalizeComparableText(address), etaj, etajnost];
+  let sql = `
+    SELECT id
+    FROM properties
+    WHERE type_id = ?
+      AND LOWER(TRIM(address)) = ?
+      AND etaj = ?
+      AND etajnost = ?
+  `;
+  if (excludeId !== null && excludeId !== undefined) {
+    sql += " AND id <> ?";
+    params.push(excludeId);
+  }
+  sql += " LIMIT 1";
+  const [rows] = await connection.execute(sql, params);
+  return rows[0] || null;
+}
 
 /** Глобальная подписка / оплата: до какой даты сервис доступен (кроме SUPER_ADMIN) */
 let siteSubscriptionCache = { at: 0, row: null };
@@ -661,7 +686,7 @@ app.post("/public/password-reset/request", async (req, res) => {
     );
 
     // Всегда возвращаем одинаковый ответ, чтобы не раскрывать, есть ли email в базе.
-    if (users.length === 0 || (!mailTransport && !resendApiKey)) {
+    if (users.length === 0 || (!mailTransport && !resendApiKey && !passwordResetReturnLink)) {
       return res.json({ ok: true, message: "Если email существует, инструкция отправлена." });
     }
 
@@ -685,20 +710,26 @@ app.post("/public/password-reset/request", async (req, res) => {
     const html = buildPasswordResetEmail({ fullName, resetLink });
 
     // Отвечаем сразу, а отправку выполняем в фоне — UI не ждёт SMTP.
-    res.json({ ok: true, message: "Если email существует, инструкция отправлена." });
-    setImmediate(async () => {
-      try {
-        const sent = await sendMailSmart({
-          to: user.email,
-          subject: "Kurut · Восстановление пароля",
-          text: `Ссылка для восстановления пароля: ${resetLink} (действует 30 минут)`,
-          html,
-        });
-        console.log(`Password reset email sent via ${sent.provider} to ${user.email}`);
-      } catch (mailErr) {
-        console.error("Background reset email error:", mailErr);
-      }
+    res.json({
+      ok: true,
+      message: "Если email существует, инструкция отправлена.",
+      ...(passwordResetReturnLink ? { resetLink } : {}),
     });
+    if (mailTransport || resendApiKey) {
+      setImmediate(async () => {
+        try {
+          const sent = await sendMailSmart({
+            to: user.email,
+            subject: "Kurut · Восстановление пароля",
+            text: `Ссылка для восстановления пароля: ${resetLink} (действует 30 минут)`,
+            html,
+          });
+          console.log(`Password reset email sent via ${sent.provider} to ${user.email}`);
+        } catch (mailErr) {
+          console.error("Background reset email error:", mailErr);
+        }
+      });
+    }
     return;
   } catch (error) {
     console.error("POST /public/password-reset/request:", error);
@@ -2127,6 +2158,16 @@ app.post("/api/properties", authenticate, upload.any(), async (req, res) => {
       }
     }
 
+    const duplicate = await findDuplicateProperty(connection, {
+      typeId: type_id,
+      address,
+      etaj: parseInt(etaj, 10),
+      etajnost: parseInt(etajnost, 10),
+    });
+    if (duplicate) {
+      return res.status(409).json({ error: `Такой вариант уже существует (ID ${duplicate.id})` });
+    }
+
     let curatorName = null;
     if (finalCuratorId) {
       const [curatorCheck] = await connection.execute(
@@ -2374,6 +2415,17 @@ app.put("/api/properties/:id", authenticate, upload.any(), async (req, res) => {
       if (subdistrictCheck.length === 0) {
         return res.status(400).json({ error: "Недействительный ID микрорайона или микрорайон не принадлежит указанному району" });
       }
+    }
+
+    const duplicate = await findDuplicateProperty(connection, {
+      typeId: type_id,
+      address,
+      etaj: parseInt(etaj, 10),
+      etajnost: parseInt(etajnost, 10),
+      excludeId: parseInt(id, 10),
+    });
+    if (duplicate) {
+      return res.status(409).json({ error: `Такой вариант уже существует (ID ${duplicate.id})` });
     }
 
     let curatorName = null;
@@ -2918,6 +2970,16 @@ app.post("/api/variants", authenticate, async (req, res) => {
         [subdistrict_id, district_id || null]
       );
       if (subdistrictCheck.length === 0) return res.status(400).json({ error: "Недействительный ID микрорайона или микрорайон не принадлежит указанному району" });
+    }
+
+    const duplicate = await findDuplicateProperty(connection, {
+      typeId: type_id,
+      address,
+      etaj: pEtaj,
+      etajnost: pEtajnost,
+    });
+    if (duplicate) {
+      return res.status(409).json({ error: `Такой вариант уже существует (ID ${duplicate.id})` });
     }
 
     let curatorName = null;
