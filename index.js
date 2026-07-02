@@ -217,6 +217,12 @@ function normalizeComparableText(value) {
   return String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
 }
 
+function normalizePhoneDigits(value) {
+  const digits = String(value || "").replace(/\D/g, "");
+  if (digits.length >= 9) return digits.slice(-9);
+  return digits || null;
+}
+
 async function findDuplicateProperty(connection, { typeId, address, etaj, etajnost, excludeId = null }) {
   const params = [typeId, normalizeComparableText(address), etaj, etajnost];
   let sql = `
@@ -234,6 +240,102 @@ async function findDuplicateProperty(connection, { typeId, address, etaj, etajno
   sql += " LIMIT 1";
   const [rows] = await connection.execute(sql, params);
   return rows[0] || null;
+}
+
+async function findDuplicatePropertyByPhone(connection, { column, value, excludeId = null }) {
+  const digits = normalizePhoneDigits(value);
+  if (!digits || digits.length < 9) return null;
+
+  const params = [digits];
+  let sql = `
+    SELECT id
+    FROM properties
+    WHERE ${column} IS NOT NULL
+      AND TRIM(${column}) <> ''
+      AND RIGHT(
+        REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(${column}, ' ', ''), '-', ''), '(', ''), ')', ''), '+', ''), '.', ''),
+        9
+      ) = ?
+  `;
+  if (excludeId !== null && excludeId !== undefined) {
+    sql += " AND id <> ?";
+    params.push(excludeId);
+  }
+  sql += " LIMIT 1";
+  const [rows] = await connection.execute(sql, params);
+  return rows[0] || null;
+}
+
+async function findDuplicatePropertyByTextField(connection, { column, value, excludeId = null }) {
+  const normalized = normalizeComparableText(value);
+  if (!normalized) return null;
+
+  const params = [normalized];
+  let sql = `
+    SELECT id
+    FROM properties
+    WHERE ${column} IS NOT NULL
+      AND TRIM(${column}) <> ''
+      AND LOWER(TRIM(${column})) = ?
+  `;
+  if (excludeId !== null && excludeId !== undefined) {
+    sql += " AND id <> ?";
+    params.push(excludeId);
+  }
+  sql += " LIMIT 1";
+  const [rows] = await connection.execute(sql, params);
+  return rows[0] || null;
+}
+
+async function validatePropertyDuplicates(connection, fields, excludeId = null) {
+  const duplicate = await findDuplicateProperty(connection, {
+    typeId: fields.typeId,
+    address: fields.address,
+    etaj: fields.etaj,
+    etajnost: fields.etajnost,
+    excludeId,
+  });
+  if (duplicate) {
+    return { error: `Такой вариант уже существует (ID ${duplicate.id})` };
+  }
+
+  const phoneDup = await findDuplicatePropertyByPhone(connection, {
+    column: "phone",
+    value: fields.phone,
+    excludeId,
+  });
+  if (phoneDup) {
+    return { error: `Объект с таким номером телефона уже существует (ID ${phoneDup.id})` };
+  }
+
+  const ownerPhoneDup = await findDuplicatePropertyByPhone(connection, {
+    column: "owner_phone",
+    value: fields.owner_phone,
+    excludeId,
+  });
+  if (ownerPhoneDup) {
+    return { error: `Объект с таким телефоном собственника уже существует (ID ${ownerPhoneDup.id})` };
+  }
+
+  const descriptionDup = await findDuplicatePropertyByTextField(connection, {
+    column: "description",
+    value: fields.description,
+    excludeId,
+  });
+  if (descriptionDup) {
+    return { error: `Объект с таким описанием уже существует (ID ${descriptionDup.id})` };
+  }
+
+  const notesDup = await findDuplicatePropertyByTextField(connection, {
+    column: "notes",
+    value: fields.notes,
+    excludeId,
+  });
+  if (notesDup) {
+    return { error: `Объект с такими заметками уже существует (ID ${notesDup.id})` };
+  }
+
+  return null;
 }
 
 /** Глобальная подписка / оплата: до какой даты сервис доступен (кроме SUPER_ADMIN) */
@@ -2158,14 +2260,21 @@ app.post("/api/properties", authenticate, upload.any(), async (req, res) => {
       }
     }
 
-    const duplicate = await findDuplicateProperty(connection, {
-      typeId: type_id,
-      address,
-      etaj: parseInt(etaj, 10),
-      etajnost: parseInt(etajnost, 10),
-    });
-    if (duplicate) {
-      return res.status(409).json({ error: `Такой вариант уже существует (ID ${duplicate.id})` });
+    const duplicateError = await validatePropertyDuplicates(
+      connection,
+      {
+        typeId: type_id,
+        address,
+        etaj: parseInt(etaj, 10),
+        etajnost: parseInt(etajnost, 10),
+        phone,
+        owner_phone,
+        description,
+        notes,
+      }
+    );
+    if (duplicateError) {
+      return res.status(409).json({ error: duplicateError.error });
     }
 
     let curatorName = null;
@@ -2417,15 +2526,22 @@ app.put("/api/properties/:id", authenticate, upload.any(), async (req, res) => {
       }
     }
 
-    const duplicate = await findDuplicateProperty(connection, {
-      typeId: type_id,
-      address,
-      etaj: parseInt(etaj, 10),
-      etajnost: parseInt(etajnost, 10),
-      excludeId: parseInt(id, 10),
-    });
-    if (duplicate) {
-      return res.status(409).json({ error: `Такой вариант уже существует (ID ${duplicate.id})` });
+    const duplicateError = await validatePropertyDuplicates(
+      connection,
+      {
+        typeId: type_id,
+        address,
+        etaj: parseInt(etaj, 10),
+        etajnost: parseInt(etajnost, 10),
+        phone,
+        owner_phone,
+        description,
+        notes,
+      },
+      parseInt(id, 10)
+    );
+    if (duplicateError) {
+      return res.status(409).json({ error: duplicateError.error });
     }
 
     let curatorName = null;
@@ -2972,14 +3088,18 @@ app.post("/api/variants", authenticate, async (req, res) => {
       if (subdistrictCheck.length === 0) return res.status(400).json({ error: "Недействительный ID микрорайона или микрорайон не принадлежит указанному району" });
     }
 
-    const duplicate = await findDuplicateProperty(connection, {
+    const duplicateError = await validatePropertyDuplicates(connection, {
       typeId: type_id,
       address,
       etaj: pEtaj,
       etajnost: pEtajnost,
+      phone,
+      owner_phone,
+      description,
+      notes,
     });
-    if (duplicate) {
-      return res.status(409).json({ error: `Такой вариант уже существует (ID ${duplicate.id})` });
+    if (duplicateError) {
+      return res.status(409).json({ error: duplicateError.error });
     }
 
     let curatorName = null;
